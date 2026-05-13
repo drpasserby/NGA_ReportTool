@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA版主举报管理工具
-// @namespace    https://bbs.nga.cn
-// @version      1.0.1
+// @namespace    https://greasyfork.org/zh-CN/scripts/577814-nga%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7
+// @version      1.0.2
 // @description  NGA玩家社区网页版版主举报信息查看、筛选与管理工具
 // @author       UST
 // @match        *://bbs.nga.cn/*
@@ -12,6 +12,8 @@
 // @license      GPL-3.0
 // @icon         http://bbs.nga.cn/favicon.ico
 // @grant        none
+// @downloadURL https://update.greasyfork.org/scripts/577814/NGA%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7.user.js
+// @updateURL https://update.greasyfork.org/scripts/577814/NGA%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7.meta.js
 // ==/UserScript==
 
 (function() {
@@ -359,7 +361,7 @@
                     '</div>' +
                     '<div class="nga-report-page" data-page="1">' +
                         '<div class="filter-header">筛选版面</div>' +
-                        '<div class="filter-desc">勾选父版面可包含所有子版面；单独勾选子版面则只显示该子版面。不勾选任何版面则显示全部。</div>' +
+                        '<div class="filter-desc">(<b>仅本版</b>) 只匹配该版面；( <b>含子版</b> ) 同时匹配所有子版面。不勾选则显示全部。</div>' +
                         '<div id="nga-report-filter-tree"></div>' +
                         '<div style="margin-top:12px;">' +
                             '<button class="settings-btn" id="nga-filter-select-all">全选</button>' +
@@ -379,8 +381,9 @@
                         '</div>' +
                         '<div class="settings-section">' +
                             '<h3>关于</h3>' +
-                            '<div class="settings-row"><span class="settings-label">NGA举报管理工具 v0.3</span></div>' +
-                            '<div class="settings-row"><span class="settings-label">数据来源：</span><span style="font-size:12px;color:#8b6914;">bbs.nga.cn/nuke.php?__lib=noti&raw=3</span></div>' +
+                            '<div class="settings-row"><span class="settings-label">NGA举报管理工具</span></div>' +
+                            '<div class="settings-row"><span class="settings-label">源代码Github仓库：</span><span class="settings-value"><a href="https://github.com/drpasserby/NGA_ReportTool" target="_blank">NGA_ReportTool</a></span></div>' +
+                            '<div class="settings-row"><span class="settings-label">开发者：</span><span class="settings-value"><a href="https://bbs.nga.cn/nuke.php?func=ucp&uid=62716817" target="_blank">UST</a></span></div>' +
                         '</div>' +
                     '</div>' +
                 '</div>' +
@@ -416,7 +419,6 @@
         return btnWrap;
     }
 
-    // ========== 数据解析公共函数 ==========
     function parseReportResponse(raw, reject) {
         var data;
         if (typeof raw === 'string') {
@@ -437,6 +439,7 @@
         }
         return data;
     }
+
 
     function extractReports(data, reject) {
         log('=== 解析后的完整数据 ===');
@@ -481,6 +484,7 @@
 
 
 
+    function fetchReportData() {
         return new Promise(function(resolve, reject) {
             var started = false;
             var maxAttempts = 20;
@@ -491,7 +495,8 @@
                 if (typeof __NUKE !== 'undefined' && typeof __NUKE.doRequest2 === 'function') {
                     if (started) return;
                     started = true;
-                    log('__NUKE 已就绪(第' + attempt + '次检测)，使用原生请求');
+                    console.warn(LOG_PREFIX, '★★★ [路径A] __NUKE.doRequest2 可用(第' + attempt + '次检测) ★★★');
+
                     var timeout = setTimeout(function() {
                         reject(new Error('__NUKE请求超时(15秒)'));
                     }, 15000);
@@ -499,24 +504,20 @@
                     __NUKE.doRequest2(
                         'f', function(d) {
                             clearTimeout(timeout);
-                            log('<<< __NUKE.doRequest2 回调');
-                            log('原始响应类型: ' + typeof d);
-                            console.log(LOG_PREFIX, '原始响应:', d);
                             var data = parseReportResponse(d, reject);
                             if (!data) return;
                             var reports = extractReports(data, reject);
-                            if (reports) resolve(reports);
+                            if (reports) {
+                                console.warn(LOG_PREFIX, '★★★ [路径A-成功] __NUKE.doRequest2 获取到 ' + reports.length + ' 条记录 ★★★');
+                                resolve(reports);
+                            }
                         },
                         'u', '/nuke.php?__lib=noti&__act=get_all&raw=3'
                     );
                 } else if (attempt < maxAttempts) {
                     setTimeout(tryNuke, 500);
-                } else {
-                    log('__NUKE 未就绪(等待' + (maxAttempts * 500 / 1000) + '秒)，使用 XHR 回退');
-                    fetchViaXHR(resolve, reject);
-                }
+                } 
             }
-
             tryNuke();
         });
     }
@@ -658,7 +659,8 @@
                         }
                     };
 
-                    renderFilterItem(name, name + ' (包含所有子版面)', selectedForums, childrenDiv);
+                    renderFilterItem(name, name + ' (含子版)', selectedForums, childrenDiv);
+                    renderFilterItem(name + '$exact', name + ' (仅本版)', selectedForums, childrenDiv);
                     renderFilterChildren(children, name, selectedForums, childrenDiv);
 
                     groupDiv.appendChild(titleDiv);
@@ -686,7 +688,8 @@
                     subGroup.style.marginLeft = '16px';
                     subGroup.style.marginTop = '4px';
 
-                    renderFilterItem(fullName, name + ' (包含所有子版面)', selectedForums, subGroup);
+                    renderFilterItem(fullName, name + ' (含子版)', selectedForums, subGroup);
+                    renderFilterItem(fullName + '$exact', name + ' (仅本版)', selectedForums, subGroup);
 
                     var innerDiv = document.createElement('div');
                     innerDiv.style.marginLeft = '16px';
@@ -737,6 +740,7 @@
                 var fullName = prefix ? prefix + '>' + name : name;
                 allNames.push(fullName);
                 if (Object.keys(node._children).length > 0) {
+                    allNames.push(fullName + '$exact');
                     collectNames(node._children, fullName);
                 }
             }
@@ -753,22 +757,32 @@
         refreshTable();
     }
 
+    var FILTER_EXACT_SUFFIX = '$exact';
+
     function getFilteredReports(reports) {
         var config = getFilterConfig();
         if (!config.selectedForums || config.selectedForums.length === 0) {
             return reports;
         }
-        var selectedSet = {};
+        var ancestorSet = {};
+        var exactSet = {};
         for (var i = 0; i < config.selectedForums.length; i++) {
-            selectedSet[config.selectedForums[i]] = true;
+            var f = config.selectedForums[i];
+            if (f.indexOf(FILTER_EXACT_SUFFIX) > 0 && f.substring(f.length - FILTER_EXACT_SUFFIX.length) === FILTER_EXACT_SUFFIX) {
+                exactSet[f.substring(0, f.length - FILTER_EXACT_SUFFIX.length)] = true;
+            } else {
+                ancestorSet[f] = true;
+            }
         }
         return reports.filter(function(r) {
             var forum = r[13] || '';
-            if (selectedSet[forum]) return true;
+            // 精确匹配（含子版面 key 的精确匹配 + $exact 的精确匹配）
+            if (ancestorSet[forum] || exactSet[forum]) return true;
+            // 含子版面：祖先匹配
             var parts = forum.split('>');
             for (var i = 0; i < parts.length; i++) {
                 var ancestor = parts.slice(0, i + 1).join('>');
-                if (selectedSet[ancestor]) return true;
+                if (ancestorSet[ancestor]) return true;
             }
             return false;
         });
@@ -912,7 +926,11 @@
         }
     }
 
-    // ========== 刷新数据 ==========
+    // ╔══════════════════════════════════════════╗
+    // ║ [编排器] refreshData                      ║
+    // ║ 流程: fetch → merge → save → refresh UI  ║
+    // ║ 调用: fetchReportData() → 主入口          ║
+    // ╚══════════════════════════════════════════╝
     function refreshData() {
         log('refreshData 被调用');
         var loading = document.getElementById('nga-report-loading');
@@ -974,7 +992,7 @@
     // ========== 面板显示/隐藏 ==========
     function showPanel() {
         log('显示面板');
-        var overlay = document.getElementById('nga-report-panel-overlay');
+        var overlay = document.getElementById('nga-report-panel-overlay'); 
         if (overlay) {
             overlay.classList.add('show');
             switchTab(0);
