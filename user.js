@@ -479,32 +479,7 @@
         return reports;
     }
 
-    // ========== XHR 回退方案（使用正确的 __act=get_all） ==========
-    function fetchViaXHR(resolve, reject) {
-        log('>>> 使用 XHR 回退方案');
-        var url = '/nuke.php?__lib=noti&__act=get_all&raw=3';
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', url, true);
-        xhr.setRequestHeader('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8');
 
-        xhr.onload = function() {
-            log('<<< XHR 响应状态: ' + xhr.status);
-            if (xhr.status !== 200) {
-                reject(new Error('HTTP ' + xhr.status));
-                return;
-            }
-            var data = parseReportResponse(xhr.responseText, reject);
-            if (!data) return;
-            var reports = extractReports(data, reject);
-            if (reports) resolve(reports);
-        };
-        xhr.onerror = function() { reject(new Error('XHR网络请求失败')); };
-        xhr.send();
-    }
-
-    // ========== 数据获取（优先 NGA 原生 __NUKE.doRequest2，回退 XHR） ==========
-    function fetchReportData() {
-        log('>>> 开始获取举报数据');
 
         return new Promise(function(resolve, reject) {
             var started = false;
