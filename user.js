@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA版主举报管理工具
 // @namespace    https://greasyfork.org/zh-CN/scripts/577814-nga%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7
-// @version      1.0.2
+// @version      1.0.3
 // @description  NGA玩家社区网页版版主举报信息查看、筛选与管理工具
 // @author       UST
 // @match        *://bbs.nga.cn/*
@@ -171,6 +171,7 @@
             color: #8b3a00;
             text-decoration: underline;
         }
+        #nga-report-table .col-status { width: 62px; text-align: center; }
         #nga-report-table .col-time { width: 130px; white-space: nowrap; }
         #nga-report-table .col-type { width: 56px; text-align: center; }
         #nga-report-table .col-reporter { width: 100px; }
@@ -187,6 +188,45 @@
         }
         .type-topic { background: #d4e6f1; color: #1a5276; }
         .type-reply { background: #d5f5e3; color: #1e8449; }
+        .status-tag {
+            display: inline-block;
+            padding: 1px 6px;
+            border-radius: 2px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        .status-unprocessed { background: #d5d5d5; color: #555; }
+        .status-processed { background: #d4e6f1; color: #1a5276; }
+        .status-marked { background: #f9e79f; color: #7d6608; }
+        .status-filter-btn {
+            display: inline-block;
+            padding: 3px 12px;
+            margin: 0 3px;
+            font-size: 12px;
+            cursor: pointer;
+            background: #fdf5e6;
+            border: 1px solid #c4a87c;
+            color: #6b4e2e;
+            border-radius: 2px;
+            white-space: nowrap;
+        }
+        .status-filter-btn:hover { background: #e8d8b8; border-color: #8b6914; }
+        .status-filter-btn.active { background: #492e1b; color: #fdf5e6; border-color: #492e1b; }
+        .mark-btn {
+            display: inline-block;
+            padding: 2px 8px;
+            margin: 1px 2px;
+            font-size: 11px;
+            cursor: pointer;
+            background: #f9e79f;
+            border: 1px solid #d4ac0d;
+            color: #7d6608;
+            border-radius: 2px;
+            white-space: nowrap;
+        }
+        .mark-btn:hover { background: #f5d76e; }
+        .mark-btn.is-marked { background: #d4e6f1; border-color: #5b9bd5; color: #1a5276; }
+        .mark-btn.is-marked:hover { background: #bdd7ee; }
         .action-btn {
             display: inline-block;
             padding: 2px 8px;
@@ -317,6 +357,51 @@
     // ========== 缓存Key ==========
     var CACHE_KEY = 'nga_report_cache';
     var FILTER_KEY = 'nga_report_filter';
+    var STATUS_KEY = 'nga_report_status';
+    var STATUS_FILTER_KEY = 'nga_report_status_filter';
+    var STATUS_UNPROCESSED = 0;
+    var STATUS_PROCESSED = 1;
+    var STATUS_MARKED = 2;
+    var STATUS_LABELS = ['未处理', '已处理', '已标记'];
+    var STATUS_CSS = ['status-unprocessed', 'status-processed', 'status-marked'];
+
+    function buildReportKey(r) {
+        return r[6] + '_' + r[7] + '_' + r[1] + '_' + r[9];
+    }
+
+    function getStatusMap() {
+        try {
+            var raw = localStorage.getItem(STATUS_KEY);
+            return raw ? JSON.parse(raw) : {};
+        } catch (e) { return {}; }
+    }
+
+    function saveStatusMap(map) {
+        try { localStorage.setItem(STATUS_KEY, JSON.stringify(map)); } catch (e) {}
+    }
+
+    function getReportStatus(r) {
+        var map = getStatusMap();
+        var key = buildReportKey(r);
+        return map.hasOwnProperty(key) ? map[key] : STATUS_UNPROCESSED;
+    }
+
+    function setReportStatus(r, status) {
+        var map = getStatusMap();
+        map[buildReportKey(r)] = status;
+        saveStatusMap(map);
+    }
+
+    function getStatusFilter() {
+        try {
+            var raw = localStorage.getItem(STATUS_FILTER_KEY);
+            return raw !== null ? parseInt(raw) : -1;
+        } catch (e) { return -1; }
+    }
+
+    function setStatusFilter(filter) {
+        try { localStorage.setItem(STATUS_FILTER_KEY, filter); } catch (e) {}
+    }
 
     // ========== 创建主面板DOM ==========
     function createPanel() {
@@ -338,6 +423,13 @@
                     '<div class="nga-report-page active" data-page="0">' +
                         '<div id="nga-report-stats">' +
                             '<span>共 <strong id="nga-report-count">0</strong> 条举报记录</span>' +
+                            '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;">' +
+                                '<span style="font-size:12px;color:#6b4e2e;margin-right:4px;">状态筛选：</span>' +
+                                '<button class="status-filter-btn active" data-status-filter="-1">全部</button>' +
+                                '<button class="status-filter-btn" data-status-filter="0">未处理</button>' +
+                                '<button class="status-filter-btn" data-status-filter="1">已处理</button>' +
+                                '<button class="status-filter-btn" data-status-filter="2">已标记</button>' +
+                            '</div>' +
                             '<div>' +
                                 '<span style="margin-right:10px;font-size:12px;color:#8b6914;" id="nga-report-last-update"></span>' +
                                 '<button id="nga-report-refresh-btn">刷新数据</button>' +
@@ -347,6 +439,7 @@
                             '<div id="nga-report-loading">正在加载数据...</div>' +
                             '<table id="nga-report-table" style="display:none;">' +
                                 '<thead><tr>' +
+                                    '<th class="col-status">状态</th>' +
                                     '<th class="col-time">举报时间</th>' +
                                     '<th class="col-type">类型</th>' +
                                     '<th class="col-reporter">举报人</th>' +
@@ -760,32 +853,42 @@
     var FILTER_EXACT_SUFFIX = '$exact';
 
     function getFilteredReports(reports) {
+        var filtered = reports;
         var config = getFilterConfig();
-        if (!config.selectedForums || config.selectedForums.length === 0) {
-            return reports;
-        }
-        var ancestorSet = {};
-        var exactSet = {};
-        for (var i = 0; i < config.selectedForums.length; i++) {
-            var f = config.selectedForums[i];
-            if (f.indexOf(FILTER_EXACT_SUFFIX) > 0 && f.substring(f.length - FILTER_EXACT_SUFFIX.length) === FILTER_EXACT_SUFFIX) {
-                exactSet[f.substring(0, f.length - FILTER_EXACT_SUFFIX.length)] = true;
-            } else {
-                ancestorSet[f] = true;
+
+        // 版面筛选
+        if (config.selectedForums && config.selectedForums.length > 0) {
+            var ancestorSet = {};
+            var exactSet = {};
+            for (var i = 0; i < config.selectedForums.length; i++) {
+                var f = config.selectedForums[i];
+                if (f.indexOf(FILTER_EXACT_SUFFIX) > 0 && f.substring(f.length - FILTER_EXACT_SUFFIX.length) === FILTER_EXACT_SUFFIX) {
+                    exactSet[f.substring(0, f.length - FILTER_EXACT_SUFFIX.length)] = true;
+                } else {
+                    ancestorSet[f] = true;
+                }
             }
+            filtered = filtered.filter(function(r) {
+                var forum = r[13] || '';
+                if (ancestorSet[forum] || exactSet[forum]) return true;
+                var parts = forum.split('>');
+                for (var j = 0; j < parts.length; j++) {
+                    var ancestor = parts.slice(0, j + 1).join('>');
+                    if (ancestorSet[ancestor]) return true;
+                }
+                return false;
+            });
         }
-        return reports.filter(function(r) {
-            var forum = r[13] || '';
-            // 精确匹配（含子版面 key 的精确匹配 + $exact 的精确匹配）
-            if (ancestorSet[forum] || exactSet[forum]) return true;
-            // 含子版面：祖先匹配
-            var parts = forum.split('>');
-            for (var i = 0; i < parts.length; i++) {
-                var ancestor = parts.slice(0, i + 1).join('>');
-                if (ancestorSet[ancestor]) return true;
-            }
-            return false;
-        });
+
+        // 状态筛选
+        var statusFilter = getStatusFilter();
+        if (statusFilter !== -1) {
+            filtered = filtered.filter(function(r) {
+                return getReportStatus(r) === statusFilter;
+            });
+        }
+
+        return filtered;
     }
 
     function getAllReports() { return getCachedReports(); }
@@ -817,8 +920,16 @@
             var r = reports[i];
             var ts = r[9], type = r[0], uid = r[1], nickname = r[2];
             var title = r[5], reason = r[11], forum = r[13], tid = r[6], pid = r[7];
+            var status = getReportStatus(r);
+            var reportKey = buildReportKey(r);
 
             var tr = document.createElement('tr');
+
+            // 状态列
+            var tdStatus = document.createElement('td');
+            tdStatus.className = 'col-status';
+            tdStatus.innerHTML = '<span class="status-tag ' + STATUS_CSS[status] + '">' + STATUS_LABELS[status] + '</span>';
+            tr.appendChild(tdStatus);
 
             var tdTime = document.createElement('td');
             tdTime.className = 'col-time';
@@ -868,7 +979,10 @@
 
             var tdAction = document.createElement('td');
             tdAction.className = 'col-action';
+            // 标记按钮样式根据当前状态变化
+            var markBtnClass = status === STATUS_MARKED ? 'mark-btn is-marked' : 'mark-btn';
             tdAction.innerHTML =
+                '<button class="' + markBtnClass + '" data-report-key="' + reportKey + '">标记</button> ' +
                 '<button class="action-btn view-post-btn" data-tid="' + tid + '" data-pid="' + (pid || 0) + '">看帖</button> ' +
                 '<button class="action-btn view-user-btn" data-uid="' + uid + '">用户</button>';
             tr.appendChild(tdAction);
@@ -876,7 +990,7 @@
             tbody.appendChild(tr);
         }
 
-        // 事件委托：看帖按钮
+        // 事件委托：操作按钮
         tbody.onclick = function(e) {
             var target = e.target;
             if (target.classList.contains('view-post-btn')) {
@@ -890,6 +1004,16 @@
             } else if (target.classList.contains('view-user-btn')) {
                 var uidVal = target.getAttribute('data-uid');
                 window.open('https://bbs.nga.cn/nuke.php?func=ucp&uid=' + uidVal, '_blank');
+            } else if (target.classList.contains('mark-btn')) {
+                var rk = target.getAttribute('data-report-key');
+                var currentStatus = STATUS_UNPROCESSED;
+                var map = getStatusMap();
+                if (map.hasOwnProperty(rk)) { currentStatus = map[rk]; }
+                // 标记逻辑：未处理/已处理 → 已标记；已标记 → 已处理
+                var newStatus = (currentStatus === STATUS_MARKED) ? STATUS_PROCESSED : STATUS_MARKED;
+                map[rk] = newStatus;
+                saveStatusMap(map);
+                refreshTable();
             }
         };
     }
@@ -899,7 +1023,21 @@
         var reports = getDisplayReports();
         renderTable(reports);
         updateStats();
+        updateStatusFilterButtons();
         updateSettingsPage();
+    }
+
+    function updateStatusFilterButtons() {
+        var currentFilter = getStatusFilter();
+        var buttons = document.querySelectorAll('.status-filter-btn');
+        for (var i = 0; i < buttons.length; i++) {
+            var btnVal = parseInt(buttons[i].getAttribute('data-status-filter'));
+            if (btnVal === currentFilter) {
+                buttons[i].classList.add('active');
+            } else {
+                buttons[i].classList.remove('active');
+            }
+        }
     }
 
     function updateStats() {
@@ -1040,6 +1178,17 @@
         document.getElementById('nga-report-refresh-btn').addEventListener('click', function() {
             log('刷新按钮被点击');
             refreshData();
+        });
+
+        document.getElementById('nga-report-stats').addEventListener('click', function(e) {
+            var btn = e.target.closest ? e.target.closest('.status-filter-btn') : null;
+            if (!btn) return;
+            var filterVal = parseInt(btn.getAttribute('data-status-filter'));
+            if (!isNaN(filterVal)) {
+                setStatusFilter(filterVal);
+                updateStatusFilterButtons();
+                refreshTable();
+            }
         });
 
         document.getElementById('nga-filter-select-all').addEventListener('click', selectAllForums);
