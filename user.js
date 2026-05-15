@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA版主举报管理工具
 // @namespace    https://greasyfork.org/zh-CN/scripts/577814-nga%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7
-// @version      1.0.3
+// @version      1.0.4
 // @description  NGA玩家社区网页版版主举报信息查看、筛选与管理工具
 // @author       UST
 // @match        *://bbs.nga.cn/*
@@ -227,22 +227,21 @@
         .mark-btn:hover { background: #f5d76e; }
         .mark-btn.is-marked { background: #d4e6f1; border-color: #5b9bd5; color: #1a5276; }
         .mark-btn.is-marked:hover { background: #bdd7ee; }
-        .action-btn {
+        .complete-btn {
             display: inline-block;
             padding: 2px 8px;
             margin: 1px 2px;
             font-size: 11px;
             cursor: pointer;
-            background: #fdf5e6;
-            border: 1px solid #c4a87c;
-            color: #6b4e2e;
+            background: #d5f5e3;
+            border: 1px solid #82b366;
+            color: #1e8449;
             border-radius: 2px;
             white-space: nowrap;
         }
-        .action-btn:hover {
-            background: #e8d8b8;
-            border-color: #8b6914;
-        }
+        .complete-btn:hover { background: #abebc6; }
+        .complete-btn.is-done { background: #d5d5d5; border-color: #aaa; color: #555; }
+        .complete-btn.is-done:hover { background: #c0c0c0; }
         #nga-report-loading {
             text-align: center;
             padding: 40px;
@@ -979,12 +978,11 @@
 
             var tdAction = document.createElement('td');
             tdAction.className = 'col-action';
-            // 标记按钮样式根据当前状态变化
+            var completeBtnClass = status === STATUS_PROCESSED ? 'complete-btn is-done' : 'complete-btn';
             var markBtnClass = status === STATUS_MARKED ? 'mark-btn is-marked' : 'mark-btn';
             tdAction.innerHTML =
-                '<button class="' + markBtnClass + '" data-report-key="' + reportKey + '">标记</button> ' +
-                '<button class="action-btn view-post-btn" data-tid="' + tid + '" data-pid="' + (pid || 0) + '">看帖</button> ' +
-                '<button class="action-btn view-user-btn" data-uid="' + uid + '">用户</button>';
+                '<button class="' + completeBtnClass + '" data-report-key="' + reportKey + '">完成</button> ' +
+                '<button class="' + markBtnClass + '" data-report-key="' + reportKey + '">标记</button>';
             tr.appendChild(tdAction);
 
             tbody.appendChild(tr);
@@ -993,23 +991,18 @@
         // 事件委托：操作按钮
         tbody.onclick = function(e) {
             var target = e.target;
-            if (target.classList.contains('view-post-btn')) {
-                var tidVal = target.getAttribute('data-tid');
-                var pidVal = target.getAttribute('data-pid');
-                if (pidVal && pidVal !== '0') {
-                    window.open('https://bbs.nga.cn/read.php?tid=' + tidVal + '&pid=' + pidVal + '&to=1', '_blank');
-                } else {
-                    window.open('https://bbs.nga.cn/read.php?tid=' + tidVal, '_blank');
-                }
-            } else if (target.classList.contains('view-user-btn')) {
-                var uidVal = target.getAttribute('data-uid');
-                window.open('https://bbs.nga.cn/nuke.php?func=ucp&uid=' + uidVal, '_blank');
+            var rk = target.getAttribute('data-report-key');
+            if (!rk) return;
+            var map = getStatusMap();
+            var currentStatus = map.hasOwnProperty(rk) ? map[rk] : STATUS_UNPROCESSED;
+            if (target.classList.contains('complete-btn')) {
+                // 完成按钮：未处理 → 已处理；已处理 → 未处理
+                var newStatus = (currentStatus === STATUS_PROCESSED) ? STATUS_UNPROCESSED : STATUS_PROCESSED;
+                map[rk] = newStatus;
+                saveStatusMap(map);
+                refreshTable();
             } else if (target.classList.contains('mark-btn')) {
-                var rk = target.getAttribute('data-report-key');
-                var currentStatus = STATUS_UNPROCESSED;
-                var map = getStatusMap();
-                if (map.hasOwnProperty(rk)) { currentStatus = map[rk]; }
-                // 标记逻辑：未处理/已处理 → 已标记；已标记 → 已处理
+                // 标记按钮：已标记 → 已处理；其他 → 已标记
                 var newStatus = (currentStatus === STATUS_MARKED) ? STATUS_PROCESSED : STATUS_MARKED;
                 map[rk] = newStatus;
                 saveStatusMap(map);
