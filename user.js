@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA版主举报管理工具
 // @namespace    https://greasyfork.org/zh-CN/scripts/577814-nga%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7
-// @version      1.0.4
+// @version      1.0.5
 // @description  NGA玩家社区网页版版主举报信息查看、筛选与管理工具
 // @author       UST
 // @match        *://bbs.nga.cn/*
@@ -171,7 +171,8 @@
             color: #8b3a00;
             text-decoration: underline;
         }
-        #nga-report-table .col-status { width: 62px; text-align: center; }
+        #nga-report-table .col-mark { width: 52px; text-align: center; }
+        #nga-report-table .col-state { min-width: 72px; }
         #nga-report-table .col-time { width: 130px; white-space: nowrap; }
         #nga-report-table .col-type { width: 56px; text-align: center; }
         #nga-report-table .col-reporter { width: 100px; }
@@ -188,6 +189,16 @@
         }
         .type-topic { background: #d4e6f1; color: #1a5276; }
         .type-reply { background: #d5f5e3; color: #1e8449; }
+        .state-tag {
+            display: inline-block;
+            padding: 1px 5px;
+            margin: 1px;
+            border-radius: 2px;
+            font-size: 11px;
+            font-weight: bold;
+            background: #d4e6f1;
+            color: #1a5276;
+        }
         .status-tag {
             display: inline-block;
             padding: 1px 6px;
@@ -402,6 +413,95 @@
         try { localStorage.setItem(STATUS_FILTER_KEY, filter); } catch (e) {}
     }
 
+    // ========== 帖子状态解析 ==========
+    var STATE_CACHE_KEY = 'nga_post_state_cache';
+
+    function getPostStates(type) {
+        var stateMap = [
+            { mask: 1,        name: '附件' },
+            { mask: 2,        name: '隐藏' },
+            { mask: 8,        name: '延时' },
+            { mask: 32,       name: '标记' },
+            { mask: 128,      name: '编辑' },
+            { mask: 256,      name: '占楼' },
+            { mask: 512,      name: '审核中' },
+            { mask: 1024,     name: '锁定' },
+            { mask: 2048,     name: '处罚' },
+            { mask: 8192,     name: '附件' },
+            { mask: 16384,    name: '审核中' },
+            { mask: 32768,    name: '合集' },
+            { mask: 65536,    name: '直播' },
+            { mask: 131072,   name: '本区' },
+            { mask: 262144,   name: '匿名' },
+            { mask: 524288,   name: '附件显示' },
+            { mask: 2097152,  name: '版面' },
+            { mask: 16777216, name: '下沉' },
+            { mask: 67108864, name: '黑审' }
+        ];
+        var states = [];
+        for (var i = 0; i < stateMap.length; i++) {
+            if ((type & stateMap[i].mask) === stateMap[i].mask) {
+                states.push(stateMap[i].name);
+            }
+        }
+        return states;
+    }
+
+    function getStateCache() {
+        try {
+            var raw = localStorage.getItem(STATE_CACHE_KEY);
+            return raw ? JSON.parse(raw) : {};
+        } catch (e) { return {}; }
+    }
+
+    function saveStateCache(cache) {
+        try { localStorage.setItem(STATE_CACHE_KEY, JSON.stringify(cache)); } catch (e) {}
+    }
+
+    function makeStateCacheKey(reportType, tid, pid) {
+        return reportType === 13 ? ('tid_' + tid) : ('pid_' + pid);
+    }
+
+    function fetchPostState(reportType, tid, pid, callback) {
+        var cacheKey = makeStateCacheKey(reportType, tid, pid);
+        var cache = getStateCache();
+        if (cache.hasOwnProperty(cacheKey)) {
+            callback(cache[cacheKey]);
+            return;
+        }
+        var url;
+        if (reportType === 13) {
+            url = '/read.php?tid=' + tid + '&__output=11';
+        } else {
+            url = '/read.php?pid=' + pid + '&__output=11';
+        }
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', url, true);
+        xhr.timeout = 8000;
+        xhr.onload = function() {
+            if (xhr.status !== 200) { callback([]); return; }
+            try {
+                var resp = JSON.parse(xhr.responseText);
+                var data = resp.data || resp;
+                var typeVal;
+                if (reportType === 13) {
+                    typeVal = (data.__T && data.__T.type) ? data.__T.type : 0;
+                } else {
+                    typeVal = (data.__R && data.__R.length > 0) ? (data.__R[0].type || 0) : 0;
+                }
+                var states = getPostStates(typeVal);
+                cache[cacheKey] = states;
+                saveStateCache(cache);
+                callback(states);
+            } catch (e) {
+                callback([]);
+            }
+        };
+        xhr.onerror = function() { callback([]); };
+        xhr.ontimeout = function() { callback([]); };
+        xhr.send();
+    }
+
     // ========== 创建主面板DOM ==========
     function createPanel() {
         log('创建面板DOM');
@@ -438,7 +538,8 @@
                             '<div id="nga-report-loading">正在加载数据...</div>' +
                             '<table id="nga-report-table" style="display:none;">' +
                                 '<thead><tr>' +
-                                    '<th class="col-status">状态</th>' +
+                                    '<th class="col-mark">标记</th>' +
+                                    '<th class="col-state">状态</th>' +
                                     '<th class="col-time">举报时间</th>' +
                                     '<th class="col-type">类型</th>' +
                                     '<th class="col-reporter">举报人</th>' +
@@ -608,7 +709,7 @@
                     );
                 } else if (attempt < maxAttempts) {
                     setTimeout(tryNuke, 500);
-                } 
+                }
             }
             tryNuke();
         });
@@ -924,11 +1025,22 @@
 
             var tr = document.createElement('tr');
 
-            // 状态列
-            var tdStatus = document.createElement('td');
-            tdStatus.className = 'col-status';
-            tdStatus.innerHTML = '<span class="status-tag ' + STATUS_CSS[status] + '">' + STATUS_LABELS[status] + '</span>';
-            tr.appendChild(tdStatus);
+            // 标记列
+            var tdMark = document.createElement('td');
+            tdMark.className = 'col-mark';
+            tdMark.innerHTML = '<span class="status-tag ' + STATUS_CSS[status] + '">' + STATUS_LABELS[status] + '</span>';
+            tr.appendChild(tdMark);
+
+            // 状态列（帖子状态标签）
+            var tdState = document.createElement('td');
+            tdState.className = 'col-state';
+            tdState.innerHTML = '<span style="color:#999;font-size:11px;">加载中...</span>';
+            var cacheKey = makeStateCacheKey(type, tid, pid);
+            var stateCache = getStateCache();
+            if (stateCache.hasOwnProperty(cacheKey)) {
+                renderStateTags(tdState, stateCache[cacheKey]);
+            }
+            tr.appendChild(tdState);
 
             var tdTime = document.createElement('td');
             tdTime.className = 'col-time';
@@ -1009,6 +1121,16 @@
                 refreshTable();
             }
         };
+
+        // 异步加载帖子状态
+        for (var i = 0; i < reports.length; i++) {
+            (function(r, td) {
+                var rptType = r[0], rptTid = r[6], rptPid = r[7];
+                fetchPostState(rptType, rptTid, rptPid, function(states) {
+                    renderStateTags(td, states);
+                });
+            })(reports[i], tbody.rows[i].cells[1]); // cells[1] = 状态列(第二个td)
+        }
     }
 
     // ========== 刷新表格 ==========
@@ -1018,6 +1140,20 @@
         updateStats();
         updateStatusFilterButtons();
         updateSettingsPage();
+    }
+
+    function renderStateTags(td, states) {
+        td.innerHTML = '';
+        if (!states || states.length === 0) {
+            td.innerHTML = '<span style="color:#aaa;font-size:11px;">-</span>';
+            return;
+        }
+        for (var i = 0; i < states.length; i++) {
+            var tag = document.createElement('span');
+            tag.className = 'state-tag';
+            tag.textContent = states[i];
+            td.appendChild(tag);
+        }
     }
 
     function updateStatusFilterButtons() {
@@ -1123,7 +1259,7 @@
     // ========== 面板显示/隐藏 ==========
     function showPanel() {
         log('显示面板');
-        var overlay = document.getElementById('nga-report-panel-overlay'); 
+        var overlay = document.getElementById('nga-report-panel-overlay');
         if (overlay) {
             overlay.classList.add('show');
             switchTab(0);
