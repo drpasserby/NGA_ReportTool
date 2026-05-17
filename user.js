@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA版主举报管理工具
 // @namespace    https://greasyfork.org/zh-CN/scripts/577814-nga%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7
-// @version      1.0.5
+// @version      1.0.6
 // @description  NGA玩家社区网页版版主举报信息查看、筛选与管理工具
 // @author       UST
 // @match        *://bbs.nga.cn/*
@@ -199,6 +199,31 @@
             background: #d4e6f1;
             color: #1a5276;
         }
+        #nga-report-pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 6px;
+            margin-top: 10px;
+            padding: 8px 0;
+        }
+        .pagination-btn {
+            padding: 4px 12px;
+            font-size: 12px;
+            cursor: pointer;
+            background: #fdf5e6;
+            border: 1px solid #c4a87c;
+            color: #6b4e2e;
+            border-radius: 2px;
+            white-space: nowrap;
+        }
+        .pagination-btn:hover { background: #e8d8b8; border-color: #8b6914; }
+        .pagination-btn:disabled { background: #eee; color: #bbb; border-color: #ddd; cursor: default; }
+        .pagination-info {
+            font-size: 12px;
+            color: #6b4e2e;
+            margin: 0 4px;
+        }
         .status-tag {
             display: inline-block;
             padding: 1px 6px;
@@ -374,6 +399,8 @@
     var STATUS_MARKED = 2;
     var STATUS_LABELS = ['未处理', '已处理', '已标记'];
     var STATUS_CSS = ['status-unprocessed', 'status-processed', 'status-marked'];
+    var PAGE_SIZE = 25;
+    var currentPage = 0;
 
     function buildReportKey(r) {
         return r[6] + '_' + r[7] + '_' + r[1] + '_' + r[9];
@@ -550,6 +577,7 @@
                                 '</tr></thead>' +
                                 '<tbody id="nga-report-tbody"></tbody>' +
                             '</table>' +
+                            '<div id="nga-report-pagination"></div>' +
                         '</div>' +
                     '</div>' +
                     '<div class="nga-report-page" data-page="1">' +
@@ -995,7 +1023,7 @@
     function getDisplayReports() { return getFilteredReports(getAllReports()); }
 
     // ========== 渲染表格 ==========
-    function renderTable(reports) {
+    function renderTable(allReports) {
         var tbody = document.getElementById('nga-report-tbody');
         var table = document.getElementById('nga-report-table');
         var loading = document.getElementById('nga-report-loading');
@@ -1004,20 +1032,28 @@
         if (!tbody) return;
 
         tbody.innerHTML = '';
-        countEl.textContent = reports.length;
+        countEl.textContent = allReports.length;
 
-        if (reports.length === 0) {
+        if (allReports.length === 0) {
             loading.style.display = 'block';
             loading.textContent = '暂无举报数据';
             table.style.display = 'none';
+            document.getElementById('nga-report-pagination').innerHTML = '';
             return;
         }
 
         loading.style.display = 'none';
         table.style.display = '';
 
-        for (var i = 0; i < reports.length; i++) {
-            var r = reports[i];
+        var totalPages = Math.ceil(allReports.length / PAGE_SIZE);
+        if (currentPage >= totalPages) currentPage = totalPages - 1;
+        if (currentPage < 0) currentPage = 0;
+
+        var start = currentPage * PAGE_SIZE;
+        var pageReports = allReports.slice(start, start + PAGE_SIZE);
+
+        for (var i = 0; i < pageReports.length; i++) {
+            var r = pageReports[i];
             var ts = r[9], type = r[0], uid = r[1], nickname = r[2];
             var title = r[5], reason = r[11], forum = r[13], tid = r[6], pid = r[7];
             var status = getReportStatus(r);
@@ -1112,29 +1148,67 @@
                 var newStatus = (currentStatus === STATUS_PROCESSED) ? STATUS_UNPROCESSED : STATUS_PROCESSED;
                 map[rk] = newStatus;
                 saveStatusMap(map);
-                refreshTable();
+                refreshTable(true);
             } else if (target.classList.contains('mark-btn')) {
                 // 标记按钮：已标记 → 已处理；其他 → 已标记
                 var newStatus = (currentStatus === STATUS_MARKED) ? STATUS_PROCESSED : STATUS_MARKED;
                 map[rk] = newStatus;
                 saveStatusMap(map);
-                refreshTable();
+                refreshTable(true);
             }
         };
 
-        // 异步加载帖子状态
-        for (var i = 0; i < reports.length; i++) {
+        // 异步加载当前页帖子状态
+        fetchCurrentPageStates(pageReports);
+
+        // 渲染分页控件
+        renderPagination(allReports.length);
+    }
+
+    function fetchCurrentPageStates(pageReports) {
+        var tbody = document.getElementById('nga-report-tbody');
+        if (!tbody) return;
+        for (var i = 0; i < pageReports.length; i++) {
             (function(r, td) {
                 var rptType = r[0], rptTid = r[6], rptPid = r[7];
                 fetchPostState(rptType, rptTid, rptPid, function(states) {
                     renderStateTags(td, states);
                 });
-            })(reports[i], tbody.rows[i].cells[1]); // cells[1] = 状态列(第二个td)
+            })(pageReports[i], tbody.rows[i].cells[1]); // cells[1] = 状态列(第二个td)
         }
     }
 
+    function renderPagination(totalCount) {
+        var container = document.getElementById('nga-report-pagination');
+        if (!container) return;
+        var totalPages = Math.ceil(totalCount / PAGE_SIZE);
+        if (totalPages <= 1) { container.innerHTML = ''; return; }
+
+        var startNum = currentPage * PAGE_SIZE + 1;
+        var endNum = Math.min((currentPage + 1) * PAGE_SIZE, totalCount);
+
+        container.innerHTML =
+            '<button class="pagination-btn" data-page="first"' + (currentPage === 0 ? ' disabled' : '') + '>首页</button>' +
+            '<button class="pagination-btn" data-page="prev"' + (currentPage === 0 ? ' disabled' : '') + '>上一页</button>' +
+            '<span class="pagination-info">第 ' + (currentPage + 1) + '/' + totalPages + ' 页 (' + startNum + '-' + endNum + '条)</span>' +
+            '<button class="pagination-btn" data-page="next"' + (currentPage >= totalPages - 1 ? ' disabled' : '') + '>下一页</button>' +
+            '<button class="pagination-btn" data-page="last"' + (currentPage >= totalPages - 1 ? ' disabled' : '') + '>末页</button>';
+    }
+
+    function goToPage(page, totalCount) {
+        var totalPages = Math.ceil(totalCount / PAGE_SIZE);
+        if (totalPages === 0) return;
+        if (page < 0) page = 0;
+        if (page >= totalPages) page = totalPages - 1;
+        currentPage = page;
+        var reports = getDisplayReports();
+        renderTable(reports);
+    }
+
     // ========== 刷新表格 ==========
-    function refreshTable() {
+    // keepPage=true 保持当前页不变（标记/完成按钮操作），否则回到首页
+    function refreshTable(keepPage) {
+        if (!keepPage) currentPage = 0;
         var reports = getDisplayReports();
         renderTable(reports);
         updateStats();
@@ -1318,6 +1392,18 @@
                 updateStatusFilterButtons();
                 refreshTable();
             }
+        });
+
+        document.getElementById('nga-report-pagination').addEventListener('click', function(e) {
+            var btn = e.target.closest ? e.target.closest('.pagination-btn') : null;
+            if (!btn || btn.disabled) return;
+            var action = btn.getAttribute('data-page');
+            var allReports = getDisplayReports();
+            var totalPages = Math.ceil(allReports.length / PAGE_SIZE);
+            if (action === 'first') { goToPage(0, allReports.length); }
+            else if (action === 'prev') { goToPage(currentPage - 1, allReports.length); }
+            else if (action === 'next') { goToPage(currentPage + 1, allReports.length); }
+            else if (action === 'last') { goToPage(totalPages - 1, allReports.length); }
         });
 
         document.getElementById('nga-filter-select-all').addEventListener('click', selectAllForums);
