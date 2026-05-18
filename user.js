@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA版主举报管理工具
 // @namespace    https://greasyfork.org/zh-CN/scripts/577814-nga%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7
-// @version      1.0.6
+// @version      1.0.7
 // @description  NGA玩家社区网页版版主举报信息查看、筛选与管理工具
 // @author       UST
 // @match        *://bbs.nga.cn/*
@@ -130,17 +130,30 @@
         }
         #nga-report-stats span { color: #6b4e2e; }
         #nga-report-stats strong { color: #c0392b; }
-        #nga-report-refresh-btn {
-            padding: 4px 14px;
+        #nga-report-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 0;
+            margin-bottom: 10px;
+        }
+        .toolbar-btn {
+            padding: 5px 16px;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
             background: #492e1b;
             color: #fdf5e6;
             border: 1px solid #6b4e2e;
-            cursor: pointer;
-            font-size: 12px;
-            font-weight: bold;
             border-radius: 2px;
         }
-        #nga-report-refresh-btn:hover { background: #6b4e2e; }
+        .toolbar-btn:hover { background: #6b4e2e; }
+        .toolbar-btn.danger {
+            background: #d4e6f1;
+            border-color: #5b9bd5;
+            color: #1a5276;
+        }
+        .toolbar-btn.danger:hover { background: #bdd7ee; }
         #nga-report-table-wrap { overflow-x: auto; }
         #nga-report-table {
             width: 100%;
@@ -556,10 +569,11 @@
                                 '<button class="status-filter-btn" data-status-filter="1">已处理</button>' +
                                 '<button class="status-filter-btn" data-status-filter="2">已标记</button>' +
                             '</div>' +
-                            '<div>' +
-                                '<span style="margin-right:10px;font-size:12px;color:#8b6914;" id="nga-report-last-update"></span>' +
-                                '<button id="nga-report-refresh-btn">刷新数据</button>' +
-                            '</div>' +
+                            '<span style="font-size:12px;color:#8b6914;" id="nga-report-last-update"></span>' +
+                        '</div>' +
+                        '<div id="nga-report-toolbar">' +
+                            '<button id="nga-report-refresh-btn" class="toolbar-btn">刷新数据</button>' +
+                            '<button id="nga-report-batch-complete-btn" class="toolbar-btn danger">一键完成</button>' +
                         '</div>' +
                         '<div id="nga-report-table-wrap">' +
                             '<div id="nga-report-loading">正在加载数据...</div>' +
@@ -1330,6 +1344,24 @@
         }
     }
 
+    // ========== 一键完成 ==========
+    function batchComplete() {
+        var reports = getAllReports();
+        var map = getStatusMap();
+        var count = 0;
+        for (var i = 0; i < reports.length; i++) {
+            var key = buildReportKey(reports[i]);
+            var status = map.hasOwnProperty(key) ? map[key] : STATUS_UNPROCESSED;
+            if (status === STATUS_UNPROCESSED) {
+                map[key] = STATUS_PROCESSED;
+                count++;
+            }
+        }
+        saveStatusMap(map);
+        refreshTable();
+        log('一键完成: 已将 ' + count + ' 条未处理举报标记为已处理');
+    }
+
     // ========== 面板显示/隐藏 ==========
     function showPanel() {
         log('显示面板');
@@ -1381,6 +1413,11 @@
         document.getElementById('nga-report-refresh-btn').addEventListener('click', function() {
             log('刷新按钮被点击');
             refreshData();
+        });
+
+        document.getElementById('nga-report-batch-complete-btn').addEventListener('click', function() {
+            log('一键完成按钮被点击');
+            batchComplete();
         });
 
         document.getElementById('nga-report-stats').addEventListener('click', function(e) {
