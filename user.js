@@ -1302,6 +1302,7 @@
             var merged = mergeReports(existing, newReports);
             log('合并后共 ' + merged.length + ' 条记录');
             saveCache(merged);
+            localStorage.removeItem(STATE_CACHE_KEY);
             refreshTable();
             refreshFilterUI();
         }).catch(function(e) {
