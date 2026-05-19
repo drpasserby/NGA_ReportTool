@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA版主举报管理工具
 // @namespace    https://greasyfork.org/zh-CN/scripts/577814-nga%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7
-// @version      1.0.7
+// @version      1.0.8
 // @description  NGA玩家社区网页版版主举报信息查看、筛选与管理工具
 // @author       UST
 // @match        *://bbs.nga.cn/*
@@ -349,6 +349,16 @@
             font-weight: bold;
         }
         .filter-item input[type="checkbox"] { margin-right: 6px; }
+        .filter-count {
+            display: inline-block;
+            margin-left: 6px;
+            padding: 0 5px;
+            border-radius: 8px;
+            font-size: 10px;
+            font-weight: bold;
+            background: #e0cfa6;
+            color: #6b4e2e;
+        }
         .settings-section {
             margin-bottom: 16px;
             padding: 10px;
@@ -597,6 +607,7 @@
                     '<div class="nga-report-page" data-page="1">' +
                         '<div class="filter-header">筛选版面</div>' +
                         '<div class="filter-desc">(<b>仅本版</b>) 只匹配该版面；( <b>含子版</b> ) 同时匹配所有子版面。不勾选则显示全部。</div>' +
+                        '<div class="filter-desc">版面后面的数字代表该版面（本地缓存）收到的举报数量统计，可能不完全，仅供参考。</div>' +
                         '<div id="nga-report-filter-tree"></div>' +
                         '<div style="margin-top:12px;">' +
                             '<button class="settings-btn" id="nga-filter-select-all">全选</button>' +
@@ -841,7 +852,23 @@
         return tree;
     }
 
-    function renderFilterItem(fullName, displayName, selectedForums, container) {
+    function getForumCounts(reports) {
+        var exact = {};
+        var ancestor = {};
+        for (var i = 0; i < reports.length; i++) {
+            var forum = reports[i][13];
+            if (!forum) continue;
+            exact[forum] = (exact[forum] || 0) + 1;
+            var parts = forum.split('>');
+            for (var j = 0; j < parts.length; j++) {
+                var prefix = parts.slice(0, j + 1).join('>');
+                ancestor[prefix] = (ancestor[prefix] || 0) + 1;
+            }
+        }
+        return { exact: exact, ancestor: ancestor };
+    }
+
+    function renderFilterItem(fullName, displayName, selectedForums, count, container) {
         var item = document.createElement('div');
         item.className = 'filter-item' + (selectedForums.indexOf(fullName) >= 0 ? ' selected' : '');
         var cb = document.createElement('input');
@@ -858,10 +885,16 @@
         })(fullName, cb);
         item.appendChild(cb);
         item.appendChild(document.createTextNode(displayName));
+        if (typeof count === 'number') {
+            var badge = document.createElement('span');
+            badge.className = 'filter-count';
+            badge.textContent = count;
+            item.appendChild(badge);
+        }
         container.appendChild(item);
     }
 
-    function renderFilterTree(tree, selectedForums, container) {
+    function renderFilterTree(tree, selectedForums, container, counts) {
         container.innerHTML = '';
         var sortedKeys = Object.keys(tree).sort();
         for (var i = 0; i < sortedKeys.length; i++) {
@@ -877,7 +910,8 @@
 
                     var titleDiv = document.createElement('div');
                     titleDiv.className = 'filter-group-title';
-                    titleDiv.innerHTML = '<span class="arrow">▶</span> ' + name;
+                    var groupTotal = (counts.ancestor[name] || 0);
+                    titleDiv.innerHTML = '<span class="arrow">▶</span> ' + name + ' <span class="filter-count">' + groupTotal + '</span>';
 
                     var childrenDiv = document.createElement('div');
                     childrenDiv.className = 'filter-children';
@@ -894,21 +928,21 @@
                         }
                     };
 
-                    renderFilterItem(name, name + ' (含子版)', selectedForums, childrenDiv);
-                    renderFilterItem(name + '$exact', name + ' (仅本版)', selectedForums, childrenDiv);
-                    renderFilterChildren(children, name, selectedForums, childrenDiv);
+                    renderFilterItem(name, name + ' (含子版)', selectedForums, counts.ancestor[name] || 0, childrenDiv);
+                    renderFilterItem(name + '$exact', name + ' (仅本版)', selectedForums, counts.exact[name] || 0, childrenDiv);
+                    renderFilterChildren(children, name, selectedForums, childrenDiv, counts);
 
                     groupDiv.appendChild(titleDiv);
                     groupDiv.appendChild(childrenDiv);
                     container.appendChild(groupDiv);
                 } else {
-                    renderFilterItem(name, name, selectedForums, container);
+                    renderFilterItem(name, name, selectedForums, counts.exact[name] || 0, container);
                 }
             })();
         }
     }
 
-    function renderFilterChildren(tree, prefix, selectedForums, container) {
+    function renderFilterChildren(tree, prefix, selectedForums, container, counts) {
         var sortedKeys = Object.keys(tree).sort();
         for (var i = 0; i < sortedKeys.length; i++) {
             (function() {
@@ -923,17 +957,17 @@
                     subGroup.style.marginLeft = '16px';
                     subGroup.style.marginTop = '4px';
 
-                    renderFilterItem(fullName, name + ' (含子版)', selectedForums, subGroup);
-                    renderFilterItem(fullName + '$exact', name + ' (仅本版)', selectedForums, subGroup);
+                    renderFilterItem(fullName, name + ' (含子版)', selectedForums, counts.ancestor[fullName] || 0, subGroup);
+                    renderFilterItem(fullName + '$exact', name + ' (仅本版)', selectedForums, counts.exact[fullName] || 0, subGroup);
 
                     var innerDiv = document.createElement('div');
                     innerDiv.style.marginLeft = '16px';
-                    renderFilterChildren(children, fullName, selectedForums, innerDiv);
+                    renderFilterChildren(children, fullName, selectedForums, innerDiv, counts);
                     subGroup.appendChild(innerDiv);
 
                     container.appendChild(subGroup);
                 } else {
-                    renderFilterItem(fullName, fullName, selectedForums, container);
+                    renderFilterItem(fullName, fullName, selectedForums, counts.exact[fullName] || 0, container);
                 }
             })();
         }
@@ -955,10 +989,12 @@
 
     function refreshFilterUI() {
         var config = getFilterConfig();
-        var tree = buildForumTree(getAllReports());
+        var allReports = getAllReports();
+        var tree = buildForumTree(allReports);
+        var counts = getForumCounts(allReports);
         var container = document.getElementById('nga-report-filter-tree');
         if (container) {
-            renderFilterTree(tree, config.selectedForums, container);
+            renderFilterTree(tree, config.selectedForums, container, counts);
         }
     }
 
