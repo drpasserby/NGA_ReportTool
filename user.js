@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA版主举报管理工具
 // @namespace    https://greasyfork.org/zh-CN/scripts/577814-nga%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7
-// @version      1.0.9
+// @version      1.1.0
 // @description  NGA玩家社区网页版版主举报信息查看、筛选与管理工具
 // @author       UST
 // @match        *://bbs.nga.cn/*
@@ -153,7 +153,52 @@
         // ---- 滚动条 ----
         '#nga-report-panel-body::-webkit-scrollbar{width:8px}',
         '#nga-report-panel-body::-webkit-scrollbar-track{background:#f5eedb}',
-        '#nga-report-panel-body::-webkit-scrollbar-thumb{background:#c4a87c;border-radius:4px}'
+        '#nga-report-panel-body::-webkit-scrollbar-thumb{background:#c4a87c;border-radius:4px}',
+
+        // ---- 手机端适配 (屏幕宽度 ≤ 768px) ----
+        '@media (max-width:768px){',
+            // 面板全屏
+            '#nga-report-panel-overlay{padding-top:0;align-items:stretch}',
+            '#nga-report-panel{width:100%;max-width:100%;max-height:100vh;border:none;border-radius:0;font-size:14px}',
+            '#nga-report-panel-header{padding:10px 14px}',
+            '#nga-report-panel-header span{font-size:16px}',
+            '#nga-report-panel-close{font-size:22px;padding:4px}',
+            // 标签页
+            '#nga-report-tabs .tab-btn{padding:10px 14px;font-size:14px}',
+            // 面板主体
+            '#nga-report-panel-body{padding:8px}',
+            // 统计栏纵向堆叠
+            '#nga-report-stats{flex-direction:column;align-items:flex-start;gap:6px}',
+            '#nga-report-stats>div{width:100%}',
+            // 工具栏
+            '#nga-report-toolbar{gap:6px;flex-wrap:wrap}',
+            '.toolbar-btn{padding:8px 18px;font-size:13px}',
+            // 表格 - 强制横向滚动
+            '#nga-report-table-wrap{-webkit-overflow-scrolling:touch}',
+            '#nga-report-table{font-size:11px}',
+            '#nga-report-table th,#nga-report-table td{padding:5px 6px}',
+            // 标签
+            '.type-tag,.state-tag,.status-tag{font-size:10px;padding:2px 5px}',
+            '.state-tag{margin:2px 1px}',
+            // 操作按钮
+            '.complete-btn,.mark-btn{padding:4px 10px;font-size:12px;margin:2px}',
+            // 状态筛选按钮
+            '.status-filter-btn{padding:6px 14px;font-size:13px;margin:2px}',
+            // 分页
+            '#nga-report-pagination{flex-wrap:wrap;gap:4px}',
+            '.pagination-btn{padding:6px 12px;font-size:13px}',
+            '.pagination-info{font-size:13px}',
+            // 筛选页
+            '.filter-item{padding:8px 10px;font-size:13px}',
+            '.filter-group-title{padding:8px 10px;font-size:14px}',
+            '.filter-children{margin-left:12px}',
+            '.filter-count{font-size:11px;padding:1px 6px}',
+            // 设置页
+            '.settings-row{flex-direction:column;align-items:flex-start;gap:4px}',
+            '.settings-btn{padding:8px 18px;font-size:13px}',
+            // 加载
+            '#nga-report-loading{padding:30px;font-size:15px}',
+        '}'
     ].join('\n');
     document.head.appendChild(styleEl);
 
