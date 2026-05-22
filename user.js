@@ -441,16 +441,21 @@
         a.textContent = '举报管理';
         btnWrap.appendChild(a);
 
-        var rightEl = document.querySelector('.right');
-        if (rightEl) {
-            rightEl.appendChild(btnWrap);
-            log('按钮已添加到 .right');
+        // 桌面端: .right / 手机端: #m_nav, .nav, .top_nav, #ucp_menu, .header-user
+        var container = document.querySelector('.right');
+        if (!container) {
+            container = document.querySelector('#m_nav, #nav, .nav, .top_nav, #ucp_menu, .header-user, .user-menu, .m-top-bar');
+        }
+        if (container) {
+            container.insertBefore(btnWrap, container.firstChild);
+            log('按钮已添加到 ' + (container.className || container.id));
         } else {
-            log('.right 元素未找到');
-            var navEl = document.querySelector('#m_nav, #nav, .nav, .top_nav');
-            if (navEl) {
-                navEl.appendChild(btnWrap);
-            }
+            log('未找到合适的按钮容器，附加到 body');
+            btnWrap.style.position = 'fixed';
+            btnWrap.style.bottom = '20px';
+            btnWrap.style.right = '20px';
+            btnWrap.style.zIndex = '99990';
+            document.body.appendChild(btnWrap);
         }
         return btnWrap;
     }
