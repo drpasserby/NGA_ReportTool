@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA版主举报管理工具
 // @namespace    https://greasyfork.org/zh-CN/scripts/577814-nga%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7
-// @version      1.1.0
+// @version      1.1.1
 // @description  NGA玩家社区网页版版主举报信息查看、筛选与管理工具
 // @author       UST
 // @match        *://bbs.nga.cn/*
@@ -414,6 +414,16 @@
                                 '<button class="settings-btn danger" id="nga-clear-all">清除全部缓存</button>' +
                             '</div>' +
                             '<div class="settings-msg" id="nga-settings-msg"></div>' +
+                        '</div>' +
+                        '<div class="settings-section">' +
+                            '<h3>数据管理</h3>' +
+                            '<div class="settings-row"><span class="settings-label">将举报数据、状态标记、筛选配置等导出为JSON文件，或从JSON文件导入。</span></div>' +
+                            '<div style="margin-top:10px;">' +
+                                '<button class="settings-btn" id="nga-export-data">导出数据</button>' +
+                                '<button class="settings-btn" id="nga-import-overwrite">覆盖导入</button>' +
+                                '<button class="settings-btn" id="nga-import-merge">合并导入</button>' +
+                            '</div>' +
+                            '<div class="settings-msg" id="nga-data-msg"></div>' +
                         '</div>' +
                         '<div class="settings-section">' +
                             '<h3>关于</h3>' +
@@ -1194,6 +1204,114 @@
         log('一键完成: 已将 ' + count + ' 条未处理举报标记为已处理');
     }
 
+    // ========== 数据导入导出 ==========
+    var DATA_KEYS = [CACHE_KEY, STATUS_KEY, FILTER_KEY, STATUS_FILTER_KEY, STATE_CACHE_KEY];
+
+    function exportData() {
+        var exportObj = {
+            version: 1,
+            exportTime: new Date().toISOString(),
+            data: {}
+        };
+        for (var i = 0; i < DATA_KEYS.length; i++) {
+            var raw = localStorage.getItem(DATA_KEYS[i]);
+            if (raw !== null) {
+                try { exportObj.data[DATA_KEYS[i]] = JSON.parse(raw); } catch (e) {}
+            }
+        }
+        var jsonStr = JSON.stringify(exportObj, null, 2);
+        var blob = new Blob([jsonStr], { type: 'application/json' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'nga_report_backup_' + new Date().toISOString().slice(0, 10) + '.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showDataMsg('数据已导出', false);
+    }
+
+    function importFile(onLoad) {
+        var input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        input.style.display = 'none';
+        document.body.appendChild(input);
+        input.addEventListener('change', function() {
+            var file = input.files[0];
+            if (!file) { document.body.removeChild(input); return; }
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    var obj = JSON.parse(e.target.result);
+                    if (!obj.data || typeof obj.data !== 'object') {
+                        showDataMsg('文件格式无效：缺少 data 字段', true);
+                        return;
+                    }
+                    onLoad(obj.data);
+                } catch (err) {
+                    showDataMsg('JSON 解析失败：' + err.message, true);
+                }
+                document.body.removeChild(input);
+            };
+            reader.readAsText(file);
+        });
+        input.click();
+    }
+
+    function importOverwrite() {
+        importFile(function(importedData) {
+            var keys = Object.keys(importedData);
+            for (var i = 0; i < keys.length; i++) {
+                localStorage.setItem(keys[i], JSON.stringify(importedData[keys[i]]));
+            }
+            refreshTable();
+            refreshFilterUI();
+            updateSettingsPage();
+            showDataMsg('已覆盖导入 ' + keys.length + ' 个数据项');
+        });
+    }
+
+    function importMerge() {
+        importFile(function(importedData) {
+            var merged = 0;
+            var keys = Object.keys(importedData);
+            for (var i = 0; i < keys.length; i++) {
+                var key = keys[i];
+                var imported = importedData[key];
+                if (key === CACHE_KEY && Array.isArray(imported)) {
+                    var existing = getCachedReports();
+                    var mergedReports = mergeReports(existing, imported);
+                    localStorage.setItem(key, JSON.stringify(mergedReports));
+                } else if (key === STATUS_KEY || key === STATE_CACHE_KEY) {
+                    var localObj = {};
+                    try { localObj = JSON.parse(localStorage.getItem(key) || '{}'); } catch (e) {}
+                    for (var k in imported) {
+                        if (imported.hasOwnProperty(k)) { localObj[k] = imported[k]; }
+                    }
+                    localStorage.setItem(key, JSON.stringify(localObj));
+                } else {
+                    localStorage.setItem(key, JSON.stringify(imported));
+                }
+                merged++;
+            }
+            refreshTable();
+            refreshFilterUI();
+            updateSettingsPage();
+            showDataMsg('已合并导入 ' + merged + ' 个数据项');
+        });
+    }
+
+    function showDataMsg(msg, isError) {
+        var el = document.getElementById('nga-data-msg');
+        if (el) {
+            el.textContent = msg;
+            el.style.color = isError ? '#c0392b' : '#27ae60';
+            setTimeout(function() { el.textContent = ''; }, 3000);
+        }
+    }
+
     // ========== 面板显示/隐藏 ==========
     function showPanel() {
         log('显示面板');
@@ -1279,6 +1397,10 @@
         document.getElementById('nga-filter-deselect-all').addEventListener('click', deselectAllForums);
         document.getElementById('nga-clear-oldest-100').addEventListener('click', clearOldest100);
         document.getElementById('nga-clear-all').addEventListener('click', clearAll);
+
+        document.getElementById('nga-export-data').addEventListener('click', exportData);
+        document.getElementById('nga-import-overwrite').addEventListener('click', importOverwrite);
+        document.getElementById('nga-import-merge').addEventListener('click', importMerge);
 
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') hidePanel();
