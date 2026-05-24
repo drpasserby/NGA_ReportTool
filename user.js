@@ -950,7 +950,7 @@
             var reporterLink = document.createElement('a');
             reporterLink.href = 'https://bbs.nga.cn/nuke.php?func=ucp&uid=' + uid;
             reporterLink.target = '_blank';
-            reporterLink.textContent = nickname;
+            reporterLink.innerHTML = highlightText(nickname);
             reporterLink.title = 'UID: ' + uid;
             tdReporter.appendChild(reporterLink);
             tr.appendChild(tdReporter);
@@ -964,14 +964,14 @@
                 titleLink.href = 'https://bbs.nga.cn/read.php?tid=' + tid;
             }
             titleLink.target = '_blank';
-            titleLink.textContent = title;
+            titleLink.innerHTML = highlightText(title);
             titleLink.title = 'TID: ' + tid + (pid ? ' PID: ' + pid : '');
             tdTitle.appendChild(titleLink);
             tr.appendChild(tdTitle);
 
             var tdReason = document.createElement('td');
             tdReason.className = 'col-reason';
-            tdReason.textContent = reason;
+            tdReason.innerHTML = highlightText(reason);
             tr.appendChild(tdReason);
 
             var tdForum = document.createElement('td');
@@ -1205,7 +1205,7 @@
     }
 
     // ========== 数据导入导出 ==========
-    var DATA_KEYS = [CACHE_KEY, STATUS_KEY, FILTER_KEY, STATUS_FILTER_KEY, STATE_CACHE_KEY];
+    var DATA_KEYS = [CACHE_KEY, STATUS_KEY, FILTER_KEY, STATUS_FILTER_KEY, STATE_CACHE_KEY, KEYWORD_KEY];
 
     function exportData() {
         var exportObj = {
@@ -1269,6 +1269,7 @@
             refreshTable();
             refreshFilterUI();
             updateSettingsPage();
+            renderKeywordList();
             showDataMsg('已覆盖导入 ' + keys.length + ' 个数据项');
         });
     }
@@ -1284,6 +1285,17 @@
                     var existing = getCachedReports();
                     var mergedReports = mergeReports(existing, imported);
                     localStorage.setItem(key, JSON.stringify(mergedReports));
+                } else if (key === KEYWORD_KEY && Array.isArray(imported)) {
+                    var localKw = getKeywords();
+                    var localIdMap = {};
+                    for (var m = 0; m < localKw.length; m++) {
+                        localIdMap[localKw[m].id] = true;
+                    }
+                    for (var n = 0; n < imported.length; n++) {
+                        if (!localIdMap[imported[n].id]) {
+                            localKw.push(imported[n]);
+                        }
+                    }
                 } else if (key === STATUS_KEY || key === STATE_CACHE_KEY) {
                     var localObj = {};
                     try { localObj = JSON.parse(localStorage.getItem(key) || '{}'); } catch (e) {}
@@ -1310,6 +1322,113 @@
             el.style.color = isError ? '#c0392b' : '#27ae60';
             setTimeout(function() { el.textContent = ''; }, 3000);
         }
+    }
+
+    // ========== 关键词管理 ==========
+    function getKeywords() {
+        try {
+            var raw = localStorage.getItem(KEYWORD_KEY);
+            return raw ? JSON.parse(raw) : [];
+        } catch (e) { return []; }
+    }
+
+    function saveKeywords(keywords) {
+        try { localStorage.setItem(KEYWORD_KEY, JSON.stringify(keywords)); } catch (e) {}
+    }
+
+    function addKeyword(text, bgColor) {
+        var keywords = getKeywords();
+        keywords.push({
+            id: 'kw_' + Date.now(),
+            text: text,
+            enabled: true,
+            bgColor: bgColor
+        });
+        saveKeywords(keywords);
+        renderKeywordList();
+    }
+
+    function deleteKeyword(id) {
+        var keywords = getKeywords();
+        keywords = keywords.filter(function(k) { return k.id !== id; });
+        saveKeywords(keywords);
+        renderKeywordList();
+    }
+
+    function toggleKeyword(id) {
+        var keywords = getKeywords();
+        for (var i = 0; i < keywords.length; i++) {
+            if (keywords[i].id === id) {
+                keywords[i].enabled = !keywords[i].enabled;
+                break;
+            }
+        }
+        saveKeywords(keywords);
+    }
+
+    function updateKeywordColor(id, color) {
+        var keywords = getKeywords();
+        for (var i = 0; i < keywords.length; i++) {
+            if (keywords[i].id === id) {
+                keywords[i].bgColor = color;
+                break;
+            }
+        }
+        saveKeywords(keywords);
+    }
+
+    function escapeHtml(str) {
+        var div = document.createElement('div');
+        div.appendChild(document.createTextNode(str));
+        return div.innerHTML;
+    }
+
+    function highlightText(text) {
+        if (!text) return '';
+        var keywords = getKeywords();
+        var enabled = [];
+        for (var i = 0; i < keywords.length; i++) {
+            if (keywords[i].enabled) enabled.push(keywords[i]);
+        }
+        if (enabled.length === 0) return escapeHtml(text);
+        // 按关键词长度降序排列，避免短关键词先匹配导致长关键词被截断
+        enabled.sort(function(a, b) { return b.text.length - a.text.length; });
+        var escaped = escapeHtml(text);
+        for (var j = 0; j < enabled.length; j++) {
+            var kw = enabled[j];
+            var escapedKw = escapeHtml(kw.text);
+            // 仅在 text 中不区分大小写替换
+            var regex = new RegExp(escapedKw.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'gi');
+            escaped = escaped.replace(regex, function(matched) {
+                return '<span class="keyword-highlight" style="background-color:' + kw.bgColor + '">' + matched + '</span>';
+            });
+        }
+        return escaped;
+    }
+
+    function renderKeywordList() {
+        var container = document.getElementById('nga-keyword-list');
+        if (!container) return;
+        var keywords = getKeywords();
+        if (keywords.length === 0) {
+            container.innerHTML = '<div class="keyword-empty">暂无关键词，请在上方添加</div>';
+            return;
+        }
+        var html = '';
+        for (var i = 0; i < keywords.length; i++) {
+            var kw = keywords[i];
+            html += '<div class="keyword-item">';
+            html += '<span class="keyword-color-dot" style="background-color:' + kw.bgColor + '"></span>';
+            html += '<span class="keyword-text">' + escapeHtml(kw.text) + '</span>';
+            html += '<label class="kw-toggle">';
+            html += '<input type="checkbox" class="kw-checkbox" data-kw-id="' + kw.id + '"' + (kw.enabled ? ' checked' : '') + '>';
+            html += '<span class="kw-slider"></span>';
+            html += '</label>';
+            html += '<input type="color" class="keyword-color-input kw-color-picker" data-kw-id="' + kw.id + '" value="' + kw.bgColor + '" title="修改颜色">';
+            html += '<button class="kw-delete-btn" data-kw-id="' + kw.id + '">删除</button>';
+            html += '</div>';
+        }
+        container.innerHTML = html;
     }
 
     // ========== 面板显示/隐藏 ==========
@@ -1340,7 +1459,8 @@
             pages[j].classList.toggle('active', j === index);
         }
         if (index === 1) refreshFilterUI();
-        if (index === 2) updateSettingsPage();
+        if (index === 2) renderKeywordList();
+        if (index === 3) updateSettingsPage();
         if (index === 0) refreshTable();
     }
 
@@ -1401,6 +1521,52 @@
         document.getElementById('nga-export-data').addEventListener('click', exportData);
         document.getElementById('nga-import-overwrite').addEventListener('click', importOverwrite);
         document.getElementById('nga-import-merge').addEventListener('click', importMerge);
+
+        // 关键词监测页面事件
+        var kwTextInput = document.getElementById('nga-kw-text');
+        var kwColorInput = document.getElementById('nga-kw-color');
+
+        document.getElementById('nga-kw-add').addEventListener('click', function() {
+            var text = kwTextInput.value.trim();
+            if (!text) return;
+            addKeyword(text, kwColorInput.value);
+            kwTextInput.value = '';
+            refreshTable();
+        });
+
+        kwTextInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                var text = kwTextInput.value.trim();
+                if (!text) return;
+                addKeyword(text, kwColorInput.value);
+                kwTextInput.value = '';
+                refreshTable();
+            }
+        });
+
+        document.getElementById('nga-keyword-list').addEventListener('click', function(e) {
+            var target = e.target;
+            var kwId = target.getAttribute('data-kw-id');
+            if (!kwId) return;
+            if (target.classList.contains('kw-delete-btn')) {
+                deleteKeyword(kwId);
+                refreshTable();
+            }
+        });
+
+        document.getElementById('nga-keyword-list').addEventListener('change', function(e) {
+            var target = e.target;
+            var kwId = target.getAttribute('data-kw-id');
+            if (!kwId) return;
+            if (target.classList.contains('kw-checkbox')) {
+                toggleKeyword(kwId);
+                refreshTable();
+            } else if (target.classList.contains('kw-color-picker')) {
+                updateKeywordColor(kwId, target.value);
+                renderKeywordList();
+                refreshTable();
+            }
+        });
 
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') hidePanel();
