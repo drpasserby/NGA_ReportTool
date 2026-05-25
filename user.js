@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA版主举报管理工具
 // @namespace    https://greasyfork.org/zh-CN/scripts/577814-nga%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7
-// @version      1.1.1
+// @version      1.1.2
 // @description  NGA玩家社区网页版版主举报信息查看、筛选与管理工具
 // @author       UST
 // @match        *://bbs.nga.cn/*
@@ -138,6 +138,30 @@
         '.filter-item input[type="checkbox"]{margin-right:6px}',
         '.filter-count{display:inline-block;margin-left:6px;padding:0 5px;border-radius:8px;font-size:10px;font-weight:bold;background:#e0cfa6;color:#6b4e2e}',
 
+        // ---- 关键词监测页 ----
+        '.keyword-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}',
+        '.keyword-input{padding:5px 10px;font-size:13px;border:1px solid #c4a87c;border-radius:2px;color:#492e1b;background:#fff;flex:1;min-width:200px}',
+        '.keyword-input:focus{outline:none;border-color:#8b6914;box-shadow:0 0 3px rgba(139,105,20,0.3)}',
+        '.keyword-color-input{width:36px;height:30px;padding:2px;border:1px solid #c4a87c;border-radius:2px;cursor:pointer;background:#fff}',
+        '.keyword-list{margin-top:8px}',
+        '.keyword-item{display:flex;align-items:center;padding:8px 10px;border:1px solid #d4c5a9;margin-bottom:4px;background:#fff;border-radius:2px;gap:8px;flex-wrap:wrap}',
+        '.keyword-item:hover{background:#faf7f0}',
+        '.keyword-text{flex:1;font-size:13px;color:#492e1b;min-width:120px}',
+        '.keyword-color-dot{display:inline-block;width:18px;height:18px;border-radius:3px;border:1px solid #ba8b5a;flex-shrink:0}',
+        '.keyword-highlight{padding:0 2px;border-radius:2px}',
+        // toggle switch
+        '.kw-toggle{position:relative;display:inline-block;width:40px;height:22px;flex-shrink:0}',
+        '.kw-toggle input{opacity:0;width:0;height:0}',
+        '.kw-slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background-color:#ccc;transition:.2s;border-radius:22px}',
+        '.kw-slider:before{position:absolute;content:"";height:16px;width:16px;left:3px;bottom:3px;background-color:#fff;transition:.2s;border-radius:50%}',
+        '.kw-toggle input:checked+.kw-slider{background-color:#27ae60}',
+        '.kw-toggle input:checked+.kw-slider:before{transform:translateX(18px)}',
+        '.kw-delete-btn{padding:2px 10px;font-size:11px;cursor:pointer;background:#fadbd8;border:1px solid #e6a8a0;color:#c0392b;border-radius:2px;white-space:nowrap}',
+        '.kw-delete-btn:hover{background:#f5b7b1}',
+        '.kw-edit-btn{padding:2px 10px;font-size:11px;cursor:pointer;background:#d4e6f1;border:1px solid #5b9bd5;color:#1a5276;border-radius:2px;white-space:nowrap}',
+        '.kw-edit-btn:hover{background:#bdd7ee}',
+        '.keyword-empty{text-align:center;padding:30px;color:#8b6914;font-size:13px}',
+
         // ---- 设置页 ----
         '.settings-section{margin-bottom:16px;padding:10px;background:#faf7f0;border:1px solid #d4c5a9;border-radius:2px}',
         '.settings-section h3{font-size:14px;color:#492e1b;margin:0 0 8px 0;padding-bottom:6px;border-bottom:1px solid #d4c5a9}',
@@ -193,6 +217,11 @@
             '.filter-group-title{padding:8px 10px;font-size:14px}',
             '.filter-children{margin-left:12px}',
             '.filter-count{font-size:11px;padding:1px 6px}',
+            // 关键词页
+            '.keyword-toolbar{flex-direction:column;align-items:stretch}',
+            '.keyword-input{min-width:auto}',
+            '.keyword-item{gap:6px;padding:10px 8px}',
+            '.keyword-text{font-size:14px}',
             // 设置页
             '.settings-row{flex-direction:column;align-items:flex-start;gap:4px}',
             '.settings-btn{padding:8px 18px;font-size:13px}',
@@ -207,6 +236,7 @@
     var FILTER_KEY = 'nga_report_filter';
     var STATUS_KEY = 'nga_report_status';
     var STATUS_FILTER_KEY = 'nga_report_status_filter';
+    var KEYWORD_KEY = 'nga_keywords';
     var STATUS_UNPROCESSED = 0;
     var STATUS_PROCESSED = 1;
     var STATUS_MARKED = 2;
@@ -356,7 +386,8 @@
                 '<div id="nga-report-tabs">' +
                     '<div class="tab-btn active" data-tab="0">举报列表</div>' +
                     '<div class="tab-btn" data-tab="1">筛选版面</div>' +
-                    '<div class="tab-btn" data-tab="2">设置</div>' +
+                    '<div class="tab-btn" data-tab="2">关键词监测</div>' +
+                    '<div class="tab-btn" data-tab="3">设置</div>' +
                 '</div>' +
                 '<div id="nga-report-panel-body">' +
                     '<div class="nga-report-page active" data-page="0">' +
@@ -405,6 +436,16 @@
                         '</div>' +
                     '</div>' +
                     '<div class="nga-report-page" data-page="2">' +
+                        '<div class="filter-header">关键词监测</div>' +
+                        '<div class="filter-desc">设置关键词后，举报列表中的<b>举报人</b>、<b>帖子标题</b>、<b>举报理由</b>将高亮显示命中的关键词。</div>' +
+                        '<div class="keyword-toolbar">' +
+                            '<input type="text" class="keyword-input" id="nga-kw-text" placeholder="输入关键词" maxlength="50">' +
+                            '<input type="color" class="keyword-color-input" id="nga-kw-color" value="#ffff00" title="高亮颜色">' +
+                            '<button class="settings-btn" id="nga-kw-add">添加</button>' +
+                        '</div>' +
+                        '<div class="keyword-list" id="nga-keyword-list"></div>' +
+                    '</div>' +
+                    '<div class="nga-report-page" data-page="3">' +
                         '<div class="settings-section">' +
                             '<h3>缓存管理</h3>' +
                             '<div class="settings-row"><span class="settings-label">本地缓存举报条数：</span><span class="settings-value" id="nga-settings-cache-count">0</span></div>' +
@@ -1296,6 +1337,7 @@
                             localKw.push(imported[n]);
                         }
                     }
+                    saveKeywords(localKw);
                 } else if (key === STATUS_KEY || key === STATE_CACHE_KEY) {
                     var localObj = {};
                     try { localObj = JSON.parse(localStorage.getItem(key) || '{}'); } catch (e) {}
@@ -1311,6 +1353,7 @@
             refreshTable();
             refreshFilterUI();
             updateSettingsPage();
+            renderKeywordList();
             showDataMsg('已合并导入 ' + merged + ' 个数据项');
         });
     }
