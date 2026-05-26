@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA版主举报管理工具
 // @namespace    https://greasyfork.org/zh-CN/scripts/577814-nga%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7
-// @version      1.1.2
+// @version      1.1.3
 // @description  NGA玩家社区网页版版主举报信息查看、筛选与管理工具
 // @author       UST
 // @match        *://bbs.nga.cn/*
@@ -449,6 +449,7 @@
                         '<div class="settings-section">' +
                             '<h3>缓存管理</h3>' +
                             '<div class="settings-row"><span class="settings-label">本地缓存举报条数：</span><span class="settings-value" id="nga-settings-cache-count">0</span></div>' +
+                            '<div class="settings-row"><span class="settings-label">本地已使用空间：</span><span class="settings-value" id="nga-settings-storage-size">-</span></div>' +
                             '<div class="settings-row"><span class="settings-label">最后更新时间：</span><span class="settings-value" id="nga-settings-last-update">-</span></div>' +
                             '<div style="margin-top:10px;">' +
                                 '<button class="settings-btn danger" id="nga-clear-oldest-100">清除最旧的100条</button>' +
@@ -1151,12 +1152,25 @@
         }
     }
 
+    function getStorageSize() {
+        var total = 0;
+        for (var i = 0; i < DATA_KEYS.length; i++) {
+            var val = localStorage.getItem(DATA_KEYS[i]);
+            if (val) total += val.length * 2;
+        }
+        if (total < 1024) return total + ' B';
+        if (total < 1048576) return (total / 1024).toFixed(1) + ' KB';
+        return (total / 1048576).toFixed(2) + ' MB';
+    }
+
     function updateSettingsPage() {
         var countEl = document.getElementById('nga-settings-cache-count');
+        var sizeEl = document.getElementById('nga-settings-storage-size');
         var lastUpdateEl = document.getElementById('nga-settings-last-update');
         if (countEl) {
             var reports = getAllReports();
             countEl.textContent = reports.length;
+            if (sizeEl) sizeEl.textContent = getStorageSize();
             if (lastUpdateEl) {
                 lastUpdateEl.textContent = reports.length > 0 ? formatTimestamp(reports[0][9]) : '-';
             }
