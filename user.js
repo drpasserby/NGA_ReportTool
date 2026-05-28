@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA版主举报管理工具
 // @namespace    https://greasyfork.org/zh-CN/scripts/577814-nga%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7
-// @version      1.1.3
+// @version      1.1.4
 // @description  NGA玩家社区网页版版主举报信息查看、筛选与管理工具
 // @author       UST
 // @match        *://bbs.nga.cn/*
@@ -158,8 +158,6 @@
         '.kw-toggle input:checked+.kw-slider:before{transform:translateX(18px)}',
         '.kw-delete-btn{padding:2px 10px;font-size:11px;cursor:pointer;background:#fadbd8;border:1px solid #e6a8a0;color:#c0392b;border-radius:2px;white-space:nowrap}',
         '.kw-delete-btn:hover{background:#f5b7b1}',
-        '.kw-edit-btn{padding:2px 10px;font-size:11px;cursor:pointer;background:#d4e6f1;border:1px solid #5b9bd5;color:#1a5276;border-radius:2px;white-space:nowrap}',
-        '.kw-edit-btn:hover{background:#bdd7ee}',
         '.keyword-empty{text-align:center;padding:30px;color:#8b6914;font-size:13px}',
 
         // ---- 设置页 ----
@@ -535,8 +533,8 @@
 
 
     function extractReports(data, reject) {
-        log('=== 解析后的完整数据 ===');
-        console.log(LOG_PREFIX, JSON.stringify(data, null, 2));
+        // log('=== 解析后的完整数据 ===');
+        // console.log(LOG_PREFIX, JSON.stringify(data, null, 2));
 
         if (data.error) {
             reject(new Error('API错误: ' + JSON.stringify(data.error) + ' (请确认已登录NGA)'));
@@ -1435,9 +1433,7 @@
     }
 
     function escapeHtml(str) {
-        var div = document.createElement('div');
-        div.appendChild(document.createTextNode(str));
-        return div.innerHTML;
+        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
     }
 
     function highlightText(text) {
