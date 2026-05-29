@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA版主举报管理工具
 // @namespace    https://greasyfork.org/zh-CN/scripts/577814-nga%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7
-// @version      1.1.4
+// @version      1.1.5
 // @description  NGA玩家社区网页版版主举报信息查看、筛选与管理工具
 // @author       UST
 // @match        *://bbs.nga.cn/*
@@ -235,6 +235,7 @@
     var STATUS_KEY = 'nga_report_status';
     var STATUS_FILTER_KEY = 'nga_report_status_filter';
     var KEYWORD_KEY = 'nga_keywords';
+    var SYSTEM_FILTER_KEY = 'nga_system_filter';
     var STATUS_UNPROCESSED = 0;
     var STATUS_PROCESSED = 1;
     var STATUS_MARKED = 2;
@@ -279,6 +280,14 @@
 
     function setStatusFilter(filter) {
         try { localStorage.setItem(STATUS_FILTER_KEY, filter); } catch (e) {}
+    }
+
+    function isSystemFilterEnabled() {
+        try { return localStorage.getItem(SYSTEM_FILTER_KEY) === '1'; } catch (e) { return false; }
+    }
+
+    function setSystemFilter(enabled) {
+        try { localStorage.setItem(SYSTEM_FILTER_KEY, enabled ? '1' : '0'); } catch (e) {}
     }
 
     // ========== 帖子状态解析 ==========
@@ -444,6 +453,10 @@
                         '<div class="keyword-list" id="nga-keyword-list"></div>' +
                     '</div>' +
                     '<div class="nga-report-page" data-page="3">' +
+                        '<div class="settings-section">' +
+                            '<h3>功能开关</h3>' +
+                            '<div class="settings-row"><span class="settings-label">屏蔽系统消息：</span><label class="kw-toggle"><input type="checkbox" id="nga-system-filter-toggle"><span class="kw-slider"></span></label></div>' +
+                        '</div>' +
                         '<div class="settings-section">' +
                             '<h3>缓存管理</h3>' +
                             '<div class="settings-row"><span class="settings-label">本地缓存举报条数：</span><span class="settings-value" id="nga-settings-cache-count">0</span></div>' +
@@ -675,7 +688,7 @@
     function buildForumTree(reports) {
         var forumSet = {};
         for (var i = 0; i < reports.length; i++) {
-            var name = reports[i][13];
+            var name = reports[i][2] === '#SYSTEM#' ? '系统消息' : reports[i][13];
             if (name) forumSet[name] = true;
         }
         var tree = {};
@@ -701,7 +714,7 @@
         var exact = {};
         var ancestor = {};
         for (var i = 0; i < reports.length; i++) {
-            var forum = reports[i][13];
+            var forum = reports[i][2] === '#SYSTEM#' ? '系统消息' : reports[i][13];
             if (!forum) continue;
             exact[forum] = (exact[forum] || 0) + 1;
             var parts = forum.split('>');
@@ -892,6 +905,7 @@
                 }
             }
             filtered = filtered.filter(function(r) {
+                if (r[2] === '#SYSTEM#' && (ancestorSet['系统消息'] || exactSet['系统消息'])) return true;
                 var forum = r[13] || '';
                 if (ancestorSet[forum] || exactSet[forum]) return true;
                 var parts = forum.split('>');
@@ -908,6 +922,13 @@
         if (statusFilter !== -1) {
             filtered = filtered.filter(function(r) {
                 return getReportStatus(r) === statusFilter;
+            });
+        }
+
+        // 系统消息屏蔽
+        if (isSystemFilterEnabled()) {
+            filtered = filtered.filter(function(r) {
+                return r[2] !== '#SYSTEM#';
             });
         }
 
@@ -953,6 +974,7 @@
             var title = r[5], reason = r[11], forum = r[13], tid = r[6], pid = r[7];
             var status = getReportStatus(r);
             var reportKey = buildReportKey(r);
+            var isSystem = nickname === '#SYSTEM#';
 
             var tr = document.createElement('tr');
 
@@ -965,11 +987,15 @@
             // 状态列（帖子状态标签）
             var tdState = document.createElement('td');
             tdState.className = 'col-state';
-            tdState.innerHTML = '<span style="color:#999;font-size:11px;">加载中...</span>';
-            var cacheKey = makeStateCacheKey(type, tid, pid);
-            var stateCache = getStateCache();
-            if (stateCache.hasOwnProperty(cacheKey)) {
-                renderStateTags(tdState, stateCache[cacheKey]);
+            if (isSystem) {
+                tdState.innerHTML = '<span style="color:#aaa;font-size:11px;">-</span>';
+            } else {
+                tdState.innerHTML = '<span style="color:#999;font-size:11px;">加载中...</span>';
+                var cacheKey = makeStateCacheKey(type, tid, pid);
+                var stateCache = getStateCache();
+                if (stateCache.hasOwnProperty(cacheKey)) {
+                    renderStateTags(tdState, stateCache[cacheKey]);
+                }
             }
             tr.appendChild(tdState);
 
@@ -980,43 +1006,57 @@
 
             var tdType = document.createElement('td');
             tdType.className = 'col-type';
-            tdType.innerHTML = type === 13
-                ? '<span class="type-tag type-topic">主题帖</span>'
-                : '<span class="type-tag type-reply">回复</span>';
+            if (isSystem) {
+                tdType.innerHTML = '<span class="type-tag" style="background:#e8d8b8;color:#6b4e2e">系统</span>';
+            } else {
+                tdType.innerHTML = type === 13
+                    ? '<span class="type-tag type-topic">主题帖</span>'
+                    : '<span class="type-tag type-reply">回复</span>';
+            }
             tr.appendChild(tdType);
 
             var tdReporter = document.createElement('td');
             tdReporter.className = 'col-reporter';
             var reporterLink = document.createElement('a');
-            reporterLink.href = 'https://bbs.nga.cn/nuke.php?func=ucp&uid=' + uid;
-            reporterLink.target = '_blank';
-            reporterLink.innerHTML = highlightText(nickname);
-            reporterLink.title = 'UID: ' + uid;
+            if (isSystem) {
+                reporterLink.href = './nuke.php?func=message&r=51#p=1';
+                reporterLink.target = '_blank';
+                reporterLink.textContent = '系统';
+            } else {
+                reporterLink.href = 'https://bbs.nga.cn/nuke.php?func=ucp&uid=' + uid;
+                reporterLink.target = '_blank';
+                reporterLink.innerHTML = highlightText(nickname);
+                reporterLink.title = 'UID: ' + uid;
+            }
             tdReporter.appendChild(reporterLink);
             tr.appendChild(tdReporter);
 
             var tdTitle = document.createElement('td');
             tdTitle.className = 'col-title';
-            var titleLink = document.createElement('a');
-            if (type === 14 && pid) {
-                titleLink.href = 'https://bbs.nga.cn/read.php?tid=' + tid + '&pid=' + pid + '&to=1';
+            if (isSystem) {
+                tdTitle.textContent = '系统消息';
             } else {
-                titleLink.href = 'https://bbs.nga.cn/read.php?tid=' + tid;
+                var titleLink = document.createElement('a');
+                if (type === 14 && pid) {
+                    titleLink.href = 'https://bbs.nga.cn/read.php?tid=' + tid + '&pid=' + pid + '&to=1';
+                } else {
+                    titleLink.href = 'https://bbs.nga.cn/read.php?tid=' + tid;
+                }
+                titleLink.target = '_blank';
+                titleLink.innerHTML = highlightText(title);
+                titleLink.title = 'TID: ' + tid + (pid ? ' PID: ' + pid : '');
+                tdTitle.appendChild(titleLink);
             }
-            titleLink.target = '_blank';
-            titleLink.innerHTML = highlightText(title);
-            titleLink.title = 'TID: ' + tid + (pid ? ' PID: ' + pid : '');
-            tdTitle.appendChild(titleLink);
             tr.appendChild(tdTitle);
 
             var tdReason = document.createElement('td');
             tdReason.className = 'col-reason';
-            tdReason.innerHTML = highlightText(reason);
+            tdReason.innerHTML = isSystem ? '系统消息' : highlightText(reason);
             tr.appendChild(tdReason);
 
             var tdForum = document.createElement('td');
             tdForum.className = 'col-forum';
-            tdForum.textContent = forum;
+            tdForum.textContent = isSystem ? '系统消息' : forum;
             tr.appendChild(tdForum);
 
             var tdAction = document.createElement('td');
@@ -1065,6 +1105,7 @@
         if (!tbody) return;
         for (var i = 0; i < pageReports.length; i++) {
             (function(r, td) {
+                if (r[2] === '#SYSTEM#') return;
                 var rptType = r[0], rptTid = r[6], rptPid = r[7];
                 fetchPostState(rptType, rptTid, rptPid, function(states) {
                     renderStateTags(td, states);
@@ -1165,6 +1206,7 @@
         var countEl = document.getElementById('nga-settings-cache-count');
         var sizeEl = document.getElementById('nga-settings-storage-size');
         var lastUpdateEl = document.getElementById('nga-settings-last-update');
+        var sysToggle = document.getElementById('nga-system-filter-toggle');
         if (countEl) {
             var reports = getAllReports();
             countEl.textContent = reports.length;
@@ -1173,6 +1215,7 @@
                 lastUpdateEl.textContent = reports.length > 0 ? formatTimestamp(reports[0][9]) : '-';
             }
         }
+        if (sysToggle) sysToggle.checked = isSystemFilterEnabled();
     }
 
     // ╔══════════════════════════════════════════╗
@@ -1192,6 +1235,10 @@
 
         fetchReportData().then(function(newReports) {
             log('fetch 成功，获得 ' + newReports.length + ' 条新记录');
+            if (isSystemFilterEnabled()) {
+                newReports = newReports.filter(function(r) { return r[2] !== '#SYSTEM#'; });
+                log('屏蔽系统消息后剩余 ' + newReports.length + ' 条');
+            }
             var existing = getCachedReports();
             var merged = mergeReports(existing, newReports);
             log('合并后共 ' + merged.length + ' 条记录');
@@ -1258,7 +1305,7 @@
     }
 
     // ========== 数据导入导出 ==========
-    var DATA_KEYS = [CACHE_KEY, STATUS_KEY, FILTER_KEY, STATUS_FILTER_KEY, STATE_CACHE_KEY, KEYWORD_KEY];
+    var DATA_KEYS = [CACHE_KEY, STATUS_KEY, FILTER_KEY, STATUS_FILTER_KEY, STATE_CACHE_KEY, KEYWORD_KEY, SYSTEM_FILTER_KEY];
 
     function exportData() {
         var exportObj = {
@@ -1570,6 +1617,12 @@
         document.getElementById('nga-filter-deselect-all').addEventListener('click', deselectAllForums);
         document.getElementById('nga-clear-oldest-100').addEventListener('click', clearOldest100);
         document.getElementById('nga-clear-all').addEventListener('click', clearAll);
+
+        document.getElementById('nga-system-filter-toggle').addEventListener('change', function() {
+            setSystemFilter(this.checked);
+            refreshTable();
+            refreshFilterUI();
+        });
 
         document.getElementById('nga-export-data').addEventListener('click', exportData);
         document.getElementById('nga-import-overwrite').addEventListener('click', importOverwrite);
