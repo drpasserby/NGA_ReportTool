@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA版主举报管理工具
 // @namespace    https://greasyfork.org/zh-CN/scripts/577814-nga%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7
-// @version      1.1.5
+// @version      1.1.6
 // @description  NGA玩家社区网页版版主举报信息查看、筛选与管理工具
 // @author       UST
 // @match        *://bbs.nga.cn/*
@@ -77,15 +77,16 @@
         '#nga-report-table tr:hover td{background:#f0e4cc}',
         '#nga-report-table a{color:#b56700;text-decoration:none}',
         '#nga-report-table a:hover{color:#8b3a00;text-decoration:underline}',
-        '#nga-report-table .col-mark{width:52px;text-align:center}',
-        '#nga-report-table .col-state{min-width:72px}',
-        '#nga-report-table .col-time{width:130px;white-space:nowrap}',
-        '#nga-report-table .col-type{width:56px;text-align:center}',
-        '#nga-report-table .col-reporter{width:100px}',
-        '#nga-report-table .col-title{min-width:180px}',
-        '#nga-report-table .col-reason{min-width:160px}',
-        '#nga-report-table .col-forum{width:110px}',
-        '#nga-report-table .col-action{width:80px;text-align:center}',
+        '#nga-report-table .col-mark{width:50px;text-align:center}',
+        '#nga-report-table .col-state{min-width:68px}',
+        '#nga-report-table .col-time{width:120px;white-space:nowrap}',
+        '#nga-report-table .col-type{width:50px;text-align:center}',
+        '#nga-report-table .col-reporter{width:88px}',
+        '#nga-report-table .col-reported-user{width:88px}',
+        '#nga-report-table .col-title{min-width:160px}',
+        '#nga-report-table .col-reason{min-width:140px}',
+        '#nga-report-table .col-forum{width:100px}',
+        '#nga-report-table .col-action{width:72px;text-align:center}',
 
         // ---- 标签：类型 / 状态 / 标记 ----
         '.type-tag{display:inline-block;padding:1px 6px;border-radius:2px;font-size:11px;font-weight:bold}',
@@ -292,6 +293,7 @@
 
     // ========== 帖子状态解析 ==========
     var STATE_CACHE_KEY = 'nga_post_state_cache';
+    var REPORTED_USER_CACHE_KEY = 'nga_reported_user_cache';
 
     function getPostStates(type) {
         var stateMap = [
@@ -339,43 +341,92 @@
         return reportType === 13 ? ('tid_' + tid) : ('pid_' + pid);
     }
 
-    function fetchPostState(reportType, tid, pid, callback) {
-        var cacheKey = makeStateCacheKey(reportType, tid, pid);
-        var cache = getStateCache();
-        if (cache.hasOwnProperty(cacheKey)) {
-            callback(cache[cacheKey]);
+    function getReportedUserCache() {
+        try {
+            var raw = localStorage.getItem(REPORTED_USER_CACHE_KEY);
+            return raw ? JSON.parse(raw) : {};
+        } catch (e) { return {}; }
+    }
+
+    function saveReportedUserCache(cache) {
+        try { localStorage.setItem(REPORTED_USER_CACHE_KEY, JSON.stringify(cache)); } catch (e) {}
+    }
+
+    function makeReportedUserCacheKey(reportType, tid, pid) {
+        return 'ru_' + (reportType === 13 ? ('tid_' + tid) : ('pid_' + pid));
+    }
+
+    function fetchPostInfo(reportType, tid, pid, onState, onUser) {
+        var stateKey = makeStateCacheKey(reportType, tid, pid);
+        var userKey = makeReportedUserCacheKey(reportType, tid, pid);
+        var stateCache = getStateCache();
+        var userCache = getReportedUserCache();
+
+        var hasState = stateCache.hasOwnProperty(stateKey);
+        var hasUser = userCache.hasOwnProperty(userKey);
+
+        if (hasState && hasUser) {
+            onState(stateCache[stateKey]);
+            onUser(userCache[userKey]);
             return;
         }
-        var url;
-        if (reportType === 13) {
-            url = '/read.php?tid=' + tid + '&__output=11';
-        } else {
-            url = '/read.php?pid=' + pid + '&__output=11';
-        }
+
+        // 已缓存的部分立即回调
+        if (hasState) onState(stateCache[stateKey]);
+        if (hasUser) onUser(userCache[userKey]);
+
+        var url = reportType === 13
+            ? '/read.php?tid=' + tid + '&__output=11'
+            : '/read.php?pid=' + pid + '&__output=11';
+
         var xhr = new XMLHttpRequest();
         xhr.open('GET', url, true);
         xhr.timeout = 8000;
         xhr.onload = function() {
-            if (xhr.status !== 200) { callback([]); return; }
+            if (xhr.status !== 200) {
+                if (!hasState) { onState([]); stateCache[stateKey] = []; saveStateCache(stateCache); }
+                if (!hasUser) { onUser(null); userCache[userKey] = null; saveReportedUserCache(userCache); }
+                return;
+            }
             try {
                 var resp = JSON.parse(xhr.responseText);
                 var data = resp.data || resp;
-                var typeVal;
-                if (reportType === 13) {
-                    typeVal = (data.__T && data.__T.type) ? data.__T.type : 0;
-                } else {
-                    typeVal = (data.__R && data.__R.length > 0) ? (data.__R[0].type || 0) : 0;
+
+                if (!hasState) {
+                    var typeVal = reportType === 13
+                        ? ((data.__T && data.__T.type) ? data.__T.type : 0)
+                        : ((data.__R && data.__R.length > 0) ? (data.__R[0].type || 0) : 0);
+                    var states = getPostStates(typeVal);
+                    stateCache[stateKey] = states;
+                    saveStateCache(stateCache);
+                    onState(states);
                 }
-                var states = getPostStates(typeVal);
-                cache[cacheKey] = states;
-                saveStateCache(cache);
-                callback(states);
+
+                if (!hasUser) {
+                    var authorid = reportType === 13
+                        ? ((data.__T && data.__T.authorid) ? data.__T.authorid : 0)
+                        : ((data.__R && data.__R.length > 0) ? (data.__R[0].authorid || 0) : 0);
+                    var result = null;
+                    if (authorid && data.__U && data.__U[authorid]) {
+                        result = { uid: authorid, username: data.__U[authorid].username };
+                    }
+                    userCache[userKey] = result;
+                    saveReportedUserCache(userCache);
+                    onUser(result);
+                }
             } catch (e) {
-                callback([]);
+                if (!hasState) { onState([]); stateCache[stateKey] = []; saveStateCache(stateCache); }
+                if (!hasUser) { onUser(null); userCache[userKey] = null; saveReportedUserCache(userCache); }
             }
         };
-        xhr.onerror = function() { callback([]); };
-        xhr.ontimeout = function() { callback([]); };
+        xhr.onerror = function() {
+            if (!hasState) { onState([]); stateCache[stateKey] = []; saveStateCache(stateCache); }
+            if (!hasUser) { onUser(null); userCache[userKey] = null; saveReportedUserCache(userCache); }
+        };
+        xhr.ontimeout = function() {
+            if (!hasState) { onState([]); stateCache[stateKey] = []; saveStateCache(stateCache); }
+            if (!hasUser) { onUser(null); userCache[userKey] = null; saveReportedUserCache(userCache); }
+        };
         xhr.send();
     }
 
@@ -423,6 +474,7 @@
                                     '<th class="col-type">类型</th>' +
                                     '<th class="col-reporter">举报人</th>' +
                                     '<th class="col-title">帖子标题</th>' +
+                                    '<th class="col-reported-user">被举报人</th>' +
                                     '<th class="col-reason">举报理由</th>' +
                                     '<th class="col-forum">版块</th>' +
                                     '<th class="col-action">操作</th>' +
@@ -1049,6 +1101,21 @@
             }
             tr.appendChild(tdTitle);
 
+            // 被举报人列
+            var tdReportedUser = document.createElement('td');
+            tdReportedUser.className = 'col-reported-user';
+            if (isSystem) {
+                tdReportedUser.textContent = '系统消息';
+            } else {
+                tdReportedUser.innerHTML = '<span style="color:#999;font-size:11px;">加载中...</span>';
+                var ruCacheKey = makeReportedUserCacheKey(type, tid, pid);
+                var ruCache = getReportedUserCache();
+                if (ruCache.hasOwnProperty(ruCacheKey)) {
+                    renderReportedUser(tdReportedUser, ruCache[ruCacheKey]);
+                }
+            }
+            tr.appendChild(tdReportedUser);
+
             var tdReason = document.createElement('td');
             tdReason.className = 'col-reason';
             tdReason.innerHTML = isSystem ? '系统消息' : highlightText(reason);
@@ -1104,13 +1171,15 @@
         var tbody = document.getElementById('nga-report-tbody');
         if (!tbody) return;
         for (var i = 0; i < pageReports.length; i++) {
-            (function(r, td) {
+            (function(r, stateTd, ruTd) {
                 if (r[2] === '#SYSTEM#') return;
                 var rptType = r[0], rptTid = r[6], rptPid = r[7];
-                fetchPostState(rptType, rptTid, rptPid, function(states) {
-                    renderStateTags(td, states);
+                fetchPostInfo(rptType, rptTid, rptPid, function(states) {
+                    renderStateTags(stateTd, states);
+                }, function(user) {
+                    renderReportedUser(ruTd, user);
                 });
-            })(pageReports[i], tbody.rows[i].cells[1]); // cells[1] = 状态列(第二个td)
+            })(pageReports[i], tbody.rows[i].cells[1], tbody.rows[i].cells[6]); // cells[1]=状态, cells[6]=被举报人
         }
     }
 
@@ -1164,6 +1233,20 @@
             tag.textContent = states[i];
             td.appendChild(tag);
         }
+    }
+
+    function renderReportedUser(td, user) {
+        td.innerHTML = '';
+        if (!user) {
+            td.innerHTML = '<span style="color:#aaa;font-size:11px;">-</span>';
+            return;
+        }
+        var link = document.createElement('a');
+        link.href = 'https://bbs.nga.cn/nuke.php?func=ucp&uid=' + user.uid;
+        link.target = '_blank';
+        link.textContent = user.username;
+        link.title = 'UID: ' + user.uid;
+        td.appendChild(link);
     }
 
     function updateStatusFilterButtons() {
@@ -1244,6 +1327,7 @@
             log('合并后共 ' + merged.length + ' 条记录');
             saveCache(merged);
             localStorage.removeItem(STATE_CACHE_KEY);
+            localStorage.removeItem(REPORTED_USER_CACHE_KEY);
             refreshTable();
             refreshFilterUI();
         }).catch(function(e) {
@@ -1305,7 +1389,7 @@
     }
 
     // ========== 数据导入导出 ==========
-    var DATA_KEYS = [CACHE_KEY, STATUS_KEY, FILTER_KEY, STATUS_FILTER_KEY, STATE_CACHE_KEY, KEYWORD_KEY, SYSTEM_FILTER_KEY];
+    var DATA_KEYS = [CACHE_KEY, STATUS_KEY, FILTER_KEY, STATUS_FILTER_KEY, STATE_CACHE_KEY, REPORTED_USER_CACHE_KEY, KEYWORD_KEY, SYSTEM_FILTER_KEY];
 
     function exportData() {
         var exportObj = {
@@ -1397,7 +1481,7 @@
                         }
                     }
                     saveKeywords(localKw);
-                } else if (key === STATUS_KEY || key === STATE_CACHE_KEY) {
+                } else if (key === STATUS_KEY || key === STATE_CACHE_KEY || key === REPORTED_USER_CACHE_KEY) {
                     var localObj = {};
                     try { localObj = JSON.parse(localStorage.getItem(key) || '{}'); } catch (e) {}
                     for (var k in imported) {
