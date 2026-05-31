@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA版主举报管理工具
 // @namespace    https://greasyfork.org/zh-CN/scripts/577814-nga%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7
-// @version      1.1.6
+// @version      1.1.7
 // @description  NGA玩家社区网页版版主举报信息查看、筛选与管理工具
 // @author       UST
 // @match        *://bbs.nga.cn/*
@@ -77,12 +77,14 @@
         '#nga-report-table tr:hover td{background:#f0e4cc}',
         '#nga-report-table a{color:#b56700;text-decoration:none}',
         '#nga-report-table a:hover{color:#8b3a00;text-decoration:underline}',
-        '#nga-report-table .col-mark{width:50px;text-align:center}',
+        '#nga-report-table .col-mark{width:60px;text-align:center}',
         '#nga-report-table .col-state{min-width:68px}',
         '#nga-report-table .col-time{width:120px;white-space:nowrap}',
         '#nga-report-table .col-type{width:50px;text-align:center}',
         '#nga-report-table .col-reporter{width:88px}',
+        '#nga-report-table .col-reporter a{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
         '#nga-report-table .col-reported-user{width:88px}',
+        '#nga-report-table .col-reported-user a{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
         '#nga-report-table .col-title{min-width:160px}',
         '#nga-report-table .col-reason{min-width:140px}',
         '#nga-report-table .col-forum{width:100px}',
@@ -407,7 +409,9 @@
                         ? ((data.__T && data.__T.authorid) ? data.__T.authorid : 0)
                         : ((data.__R && data.__R.length > 0) ? (data.__R[0].authorid || 0) : 0);
                     var result = null;
-                    if (authorid && data.__U && data.__U[authorid]) {
+                    if (authorid === -1) {
+                        result = { uid: -1, username: '匿名' };
+                    } else if (authorid && data.__U && data.__U[authorid]) {
                         result = { uid: authorid, username: data.__U[authorid].username };
                     }
                     userCache[userKey] = result;
@@ -1062,7 +1066,7 @@
                 tdType.innerHTML = '<span class="type-tag" style="background:#e8d8b8;color:#6b4e2e">系统</span>';
             } else {
                 tdType.innerHTML = type === 13
-                    ? '<span class="type-tag type-topic">主题帖</span>'
+                    ? '<span class="type-tag type-topic">主题</span>'
                     : '<span class="type-tag type-reply">回复</span>';
             }
             tr.appendChild(tdType);
@@ -1239,6 +1243,10 @@
         td.innerHTML = '';
         if (!user) {
             td.innerHTML = '<span style="color:#aaa;font-size:11px;">-</span>';
+            return;
+        }
+        if (user.uid === -1) {
+            td.textContent = '匿名';
             return;
         }
         var link = document.createElement('a');
