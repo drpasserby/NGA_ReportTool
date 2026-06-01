@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA版主举报管理工具
 // @namespace    https://greasyfork.org/zh-CN/scripts/577814-nga%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7
-// @version      1.1.7
+// @version      1.1.8
 // @description  NGA玩家社区网页版版主举报信息查看、筛选与管理工具
 // @author       UST
 // @match        *://bbs.nga.cn/*
@@ -467,6 +467,7 @@
                         '<div id="nga-report-toolbar">' +
                             '<button id="nga-report-refresh-btn" class="toolbar-btn">刷新数据</button>' +
                             '<button id="nga-report-batch-complete-btn" class="toolbar-btn danger">一键完成</button>' +
+                            '<button id="nga-report-open-unprocessed-btn" class="toolbar-btn danger">打开未处理</button>' +
                         '</div>' +
                         '<div id="nga-report-table-wrap">' +
                             '<div id="nga-report-loading">正在加载数据...</div>' +
@@ -1396,6 +1397,29 @@
         log('一键完成: 已将 ' + count + ' 条未处理举报标记为已处理');
     }
 
+    // ========== 打开未处理 ==========
+    function openUnprocessed() {
+        var reports = getDisplayReports();
+        var map = getStatusMap();
+        var opened = 0;
+        for (var i = 0; i < reports.length; i++) {
+            var r = reports[i];
+            var key = buildReportKey(r);
+            var status = map.hasOwnProperty(key) ? map[key] : STATUS_UNPROCESSED;
+            if (status !== STATUS_UNPROCESSED) continue;
+            var type = r[0], tid = r[6], pid = r[7];
+            var url;
+            if (type === 14 && pid) {
+                url = 'https://bbs.nga.cn/read.php?tid=' + tid + '&pid=' + pid + '&to=1';
+            } else {
+                url = 'https://bbs.nga.cn/read.php?tid=' + tid;
+            }
+            window.open(url, '_blank');
+            opened++;
+        }
+        log('打开未处理: 已打开 ' + opened + ' 个未处理举报链接');
+    }
+
     // ========== 数据导入导出 ==========
     var DATA_KEYS = [CACHE_KEY, STATUS_KEY, FILTER_KEY, STATUS_FILTER_KEY, STATE_CACHE_KEY, REPORTED_USER_CACHE_KEY, KEYWORD_KEY, SYSTEM_FILTER_KEY];
 
@@ -1680,6 +1704,11 @@
         document.getElementById('nga-report-batch-complete-btn').addEventListener('click', function() {
             log('一键完成按钮被点击');
             batchComplete();
+        });
+
+        document.getElementById('nga-report-open-unprocessed-btn').addEventListener('click', function() {
+            log('打开未处理按钮被点击');
+            openUnprocessed();
         });
 
         document.getElementById('nga-report-stats').addEventListener('click', function(e) {
