@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA版主举报管理工具
 // @namespace    https://greasyfork.org/zh-CN/scripts/577814-nga%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7
-// @version      1.1.8
+// @version      1.1.9
 // @description  NGA玩家社区网页版版主举报信息查看、筛选与管理工具
 // @author       UST
 // @match        *://bbs.nga.cn/*
@@ -239,6 +239,19 @@
     var STATUS_FILTER_KEY = 'nga_report_status_filter';
     var KEYWORD_KEY = 'nga_keywords';
     var SYSTEM_FILTER_KEY = 'nga_system_filter';
+    var COLUMN_VISIBILITY_KEY = 'nga_column_visibility';
+    var COLUMNS = [
+        { key: 'mark', label: '标记', cls: 'col-mark' },
+        { key: 'state', label: '状态', cls: 'col-state' },
+        { key: 'time', label: '举报时间', cls: 'col-time' },
+        { key: 'type', label: '类型', cls: 'col-type' },
+        { key: 'reporter', label: '举报人', cls: 'col-reporter' },
+        { key: 'title', label: '帖子标题', cls: 'col-title' },
+        { key: 'reportedUser', label: '被举报人', cls: 'col-reported-user' },
+        { key: 'reason', label: '举报理由', cls: 'col-reason' },
+        { key: 'forum', label: '版块', cls: 'col-forum' }
+        // 操作列始终显示，不在列表中
+    ];
     var STATUS_UNPROCESSED = 0;
     var STATUS_PROCESSED = 1;
     var STATUS_MARKED = 2;
@@ -291,6 +304,35 @@
 
     function setSystemFilter(enabled) {
         try { localStorage.setItem(SYSTEM_FILTER_KEY, enabled ? '1' : '0'); } catch (e) {}
+    }
+
+    function getColumnVisibility() {
+        var defaults = {};
+        for (var i = 0; i < COLUMNS.length; i++) {
+            defaults[COLUMNS[i].key] = true;
+        }
+        try {
+            var raw = localStorage.getItem(COLUMN_VISIBILITY_KEY);
+            if (!raw) return defaults;
+            var saved = JSON.parse(raw);
+            for (var k in defaults) {
+                if (defaults.hasOwnProperty(k) && !saved.hasOwnProperty(k)) {
+                    saved[k] = defaults[k];
+                }
+            }
+            return saved;
+        } catch (e) { return defaults; }
+    }
+
+    function isColumnVisible(key) {
+        var vis = getColumnVisibility();
+        return vis.hasOwnProperty(key) ? vis[key] : true;
+    }
+
+    function setColumnVisibility(key, visible) {
+        var vis = getColumnVisibility();
+        vis[key] = visible;
+        try { localStorage.setItem(COLUMN_VISIBILITY_KEY, JSON.stringify(vis)); } catch (e) {}
     }
 
     // ========== 帖子状态解析 ==========
@@ -472,18 +514,7 @@
                         '<div id="nga-report-table-wrap">' +
                             '<div id="nga-report-loading">正在加载数据...</div>' +
                             '<table id="nga-report-table" style="display:none;">' +
-                                '<thead><tr>' +
-                                    '<th class="col-mark">标记</th>' +
-                                    '<th class="col-state">状态</th>' +
-                                    '<th class="col-time">举报时间</th>' +
-                                    '<th class="col-type">类型</th>' +
-                                    '<th class="col-reporter">举报人</th>' +
-                                    '<th class="col-title">帖子标题</th>' +
-                                    '<th class="col-reported-user">被举报人</th>' +
-                                    '<th class="col-reason">举报理由</th>' +
-                                    '<th class="col-forum">版块</th>' +
-                                    '<th class="col-action">操作</th>' +
-                                '</tr></thead>' +
+                                '<thead><tr id="nga-report-thead-row"></tr></thead>' +
                                 '<tbody id="nga-report-tbody"></tbody>' +
                             '</table>' +
                             '<div id="nga-report-pagination"></div>' +
@@ -513,6 +544,7 @@
                         '<div class="settings-section">' +
                             '<h3>功能开关</h3>' +
                             '<div class="settings-row"><span class="settings-label">屏蔽系统消息：</span><label class="kw-toggle"><input type="checkbox" id="nga-system-filter-toggle"><span class="kw-slider"></span></label></div>' +
+                            '<div class="settings-row" style="flex-wrap:wrap;gap:4px;"><span class="settings-label" style="width:100%;margin-bottom:4px;">显示列：</span><div id="nga-column-toggles" style="display:flex;flex-wrap:wrap;gap:6px;border:1px solid #d4c5a9;border-radius:2px;padding:6px 8px;"></div></div>' +
                         '</div>' +
                         '<div class="settings-section">' +
                             '<h3>缓存管理</h3>' +
@@ -996,6 +1028,19 @@
     function getDisplayReports() { return getFilteredReports(getAllReports()); }
 
     // ========== 渲染表格 ==========
+    function renderTableHeader() {
+        var theadRow = document.getElementById('nga-report-thead-row');
+        if (!theadRow) return;
+        var html = '';
+        for (var i = 0; i < COLUMNS.length; i++) {
+            var col = COLUMNS[i];
+            if (!isColumnVisible(col.key)) continue;
+            html += '<th class="' + col.cls + '">' + col.label + '</th>';
+        }
+        html += '<th class="col-action">操作</th>';
+        theadRow.innerHTML = html;
+    }
+
     function renderTable(allReports) {
         var tbody = document.getElementById('nga-report-tbody');
         var table = document.getElementById('nga-report-table');
@@ -1036,101 +1081,120 @@
             var tr = document.createElement('tr');
 
             // 标记列
-            var tdMark = document.createElement('td');
-            tdMark.className = 'col-mark';
-            tdMark.innerHTML = '<span class="status-tag ' + STATUS_CSS[status] + '">' + STATUS_LABELS[status] + '</span>';
-            tr.appendChild(tdMark);
-
-            // 状态列（帖子状态标签）
-            var tdState = document.createElement('td');
-            tdState.className = 'col-state';
-            if (isSystem) {
-                tdState.innerHTML = '<span style="color:#aaa;font-size:11px;">-</span>';
-            } else {
-                tdState.innerHTML = '<span style="color:#999;font-size:11px;">加载中...</span>';
-                var cacheKey = makeStateCacheKey(type, tid, pid);
-                var stateCache = getStateCache();
-                if (stateCache.hasOwnProperty(cacheKey)) {
-                    renderStateTags(tdState, stateCache[cacheKey]);
-                }
+            if (isColumnVisible('mark')) {
+                var tdMark = document.createElement('td');
+                tdMark.className = 'col-mark';
+                tdMark.innerHTML = '<span class="status-tag ' + STATUS_CSS[status] + '">' + STATUS_LABELS[status] + '</span>';
+                tr.appendChild(tdMark);
             }
-            tr.appendChild(tdState);
 
-            var tdTime = document.createElement('td');
-            tdTime.className = 'col-time';
-            tdTime.textContent = formatTimestamp(ts);
-            tr.appendChild(tdTime);
-
-            var tdType = document.createElement('td');
-            tdType.className = 'col-type';
-            if (isSystem) {
-                tdType.innerHTML = '<span class="type-tag" style="background:#e8d8b8;color:#6b4e2e">系统</span>';
-            } else {
-                tdType.innerHTML = type === 13
-                    ? '<span class="type-tag type-topic">主题</span>'
-                    : '<span class="type-tag type-reply">回复</span>';
-            }
-            tr.appendChild(tdType);
-
-            var tdReporter = document.createElement('td');
-            tdReporter.className = 'col-reporter';
-            var reporterLink = document.createElement('a');
-            if (isSystem) {
-                reporterLink.href = './nuke.php?func=message&r=51#p=1';
-                reporterLink.target = '_blank';
-                reporterLink.textContent = '系统';
-            } else {
-                reporterLink.href = 'https://bbs.nga.cn/nuke.php?func=ucp&uid=' + uid;
-                reporterLink.target = '_blank';
-                reporterLink.innerHTML = highlightText(nickname);
-                reporterLink.title = 'UID: ' + uid;
-            }
-            tdReporter.appendChild(reporterLink);
-            tr.appendChild(tdReporter);
-
-            var tdTitle = document.createElement('td');
-            tdTitle.className = 'col-title';
-            if (isSystem) {
-                tdTitle.textContent = '系统消息';
-            } else {
-                var titleLink = document.createElement('a');
-                if (type === 14 && pid) {
-                    titleLink.href = 'https://bbs.nga.cn/read.php?tid=' + tid + '&pid=' + pid + '&to=1';
+            // 状态列
+            if (isColumnVisible('state')) {
+                var tdState = document.createElement('td');
+                tdState.className = 'col-state';
+                if (isSystem) {
+                    tdState.innerHTML = '<span style="color:#aaa;font-size:11px;">-</span>';
                 } else {
-                    titleLink.href = 'https://bbs.nga.cn/read.php?tid=' + tid;
+                    tdState.innerHTML = '<span style="color:#999;font-size:11px;">加载中...</span>';
+                    var cacheKey = makeStateCacheKey(type, tid, pid);
+                    var stateCache = getStateCache();
+                    if (stateCache.hasOwnProperty(cacheKey)) {
+                        renderStateTags(tdState, stateCache[cacheKey]);
+                    }
                 }
-                titleLink.target = '_blank';
-                titleLink.innerHTML = highlightText(title);
-                titleLink.title = 'TID: ' + tid + (pid ? ' PID: ' + pid : '');
-                tdTitle.appendChild(titleLink);
+                tr.appendChild(tdState);
             }
-            tr.appendChild(tdTitle);
+
+            if (isColumnVisible('time')) {
+                var tdTime = document.createElement('td');
+                tdTime.className = 'col-time';
+                tdTime.textContent = formatTimestamp(ts);
+                tr.appendChild(tdTime);
+            }
+
+            if (isColumnVisible('type')) {
+                var tdType = document.createElement('td');
+                tdType.className = 'col-type';
+                if (isSystem) {
+                    tdType.innerHTML = '<span class="type-tag" style="background:#e8d8b8;color:#6b4e2e">系统</span>';
+                } else {
+                    tdType.innerHTML = type === 13
+                        ? '<span class="type-tag type-topic">主题</span>'
+                        : '<span class="type-tag type-reply">回复</span>';
+                }
+                tr.appendChild(tdType);
+            }
+
+            if (isColumnVisible('reporter')) {
+                var tdReporter = document.createElement('td');
+                tdReporter.className = 'col-reporter';
+                var reporterLink = document.createElement('a');
+                if (isSystem) {
+                    reporterLink.href = './nuke.php?func=message&r=51#p=1';
+                    reporterLink.target = '_blank';
+                    reporterLink.textContent = '系统';
+                } else {
+                    reporterLink.href = 'https://bbs.nga.cn/nuke.php?func=ucp&uid=' + uid;
+                    reporterLink.target = '_blank';
+                    reporterLink.innerHTML = highlightText(nickname);
+                    reporterLink.title = 'UID: ' + uid;
+                }
+                tdReporter.appendChild(reporterLink);
+                tr.appendChild(tdReporter);
+            }
+
+            if (isColumnVisible('title')) {
+                var tdTitle = document.createElement('td');
+                tdTitle.className = 'col-title';
+                if (isSystem) {
+                    tdTitle.textContent = '系统消息';
+                } else {
+                    var titleLink = document.createElement('a');
+                    if (type === 14 && pid) {
+                        titleLink.href = 'https://bbs.nga.cn/read.php?tid=' + tid + '&pid=' + pid + '&to=1';
+                    } else {
+                        titleLink.href = 'https://bbs.nga.cn/read.php?tid=' + tid;
+                    }
+                    titleLink.target = '_blank';
+                    titleLink.innerHTML = highlightText(title);
+                    titleLink.title = 'TID: ' + tid + (pid ? ' PID: ' + pid : '');
+                    tdTitle.appendChild(titleLink);
+                }
+                tr.appendChild(tdTitle);
+            }
 
             // 被举报人列
-            var tdReportedUser = document.createElement('td');
-            tdReportedUser.className = 'col-reported-user';
-            if (isSystem) {
-                tdReportedUser.textContent = '系统消息';
-            } else {
-                tdReportedUser.innerHTML = '<span style="color:#999;font-size:11px;">加载中...</span>';
-                var ruCacheKey = makeReportedUserCacheKey(type, tid, pid);
-                var ruCache = getReportedUserCache();
-                if (ruCache.hasOwnProperty(ruCacheKey)) {
-                    renderReportedUser(tdReportedUser, ruCache[ruCacheKey]);
+            if (isColumnVisible('reportedUser')) {
+                var tdReportedUser = document.createElement('td');
+                tdReportedUser.className = 'col-reported-user';
+                if (isSystem) {
+                    tdReportedUser.textContent = '系统消息';
+                } else {
+                    tdReportedUser.innerHTML = '<span style="color:#999;font-size:11px;">加载中...</span>';
+                    var ruCacheKey = makeReportedUserCacheKey(type, tid, pid);
+                    var ruCache = getReportedUserCache();
+                    if (ruCache.hasOwnProperty(ruCacheKey)) {
+                        renderReportedUser(tdReportedUser, ruCache[ruCacheKey]);
+                    }
                 }
+                tr.appendChild(tdReportedUser);
             }
-            tr.appendChild(tdReportedUser);
 
-            var tdReason = document.createElement('td');
-            tdReason.className = 'col-reason';
-            tdReason.innerHTML = isSystem ? '系统消息' : highlightText(reason);
-            tr.appendChild(tdReason);
+            if (isColumnVisible('reason')) {
+                var tdReason = document.createElement('td');
+                tdReason.className = 'col-reason';
+                tdReason.innerHTML = isSystem ? '系统消息' : highlightText(reason);
+                tr.appendChild(tdReason);
+            }
 
-            var tdForum = document.createElement('td');
-            tdForum.className = 'col-forum';
-            tdForum.textContent = isSystem ? '系统消息' : forum;
-            tr.appendChild(tdForum);
+            if (isColumnVisible('forum')) {
+                var tdForum = document.createElement('td');
+                tdForum.className = 'col-forum';
+                tdForum.textContent = isSystem ? '系统消息' : forum;
+                tr.appendChild(tdForum);
+            }
 
+            // 操作列始终显示
             var tdAction = document.createElement('td');
             tdAction.className = 'col-action';
             var completeBtnClass = status === STATUS_PROCESSED ? 'complete-btn is-done' : 'complete-btn';
@@ -1176,15 +1240,17 @@
         var tbody = document.getElementById('nga-report-tbody');
         if (!tbody) return;
         for (var i = 0; i < pageReports.length; i++) {
-            (function(r, stateTd, ruTd) {
+            (function(r, row) {
                 if (r[2] === '#SYSTEM#') return;
                 var rptType = r[0], rptTid = r[6], rptPid = r[7];
+                var stateTd = row.querySelector('.col-state');
+                var ruTd = row.querySelector('.col-reported-user');
                 fetchPostInfo(rptType, rptTid, rptPid, function(states) {
                     renderStateTags(stateTd, states);
                 }, function(user) {
-                    renderReportedUser(ruTd, user);
+                    if (ruTd) renderReportedUser(ruTd, user);
                 });
-            })(pageReports[i], tbody.rows[i].cells[1], tbody.rows[i].cells[6]); // cells[1]=状态, cells[6]=被举报人
+            })(pageReports[i], tbody.rows[i]);
         }
     }
 
@@ -1220,6 +1286,7 @@
     function refreshTable(keepPage) {
         if (!keepPage) currentPage = 0;
         var reports = getDisplayReports();
+        renderTableHeader();
         renderTable(reports);
         updateStats();
         updateStatusFilterButtons();
@@ -1294,6 +1361,19 @@
         return (total / 1048576).toFixed(2) + ' MB';
     }
 
+    function renderColumnToggles() {
+        var container = document.getElementById('nga-column-toggles');
+        if (!container) return;
+        var vis = getColumnVisibility();
+        var html = '';
+        for (var i = 0; i < COLUMNS.length; i++) {
+            var col = COLUMNS[i];
+            var checked = vis[col.key] ? ' checked' : '';
+            html += '<label style="font-size:12px;cursor:pointer;white-space:nowrap;"><input type="checkbox" class="col-vis-toggle" data-col="' + col.key + '"' + checked + '> ' + col.label + '</label>';
+        }
+        container.innerHTML = html;
+    }
+
     function updateSettingsPage() {
         var countEl = document.getElementById('nga-settings-cache-count');
         var sizeEl = document.getElementById('nga-settings-storage-size');
@@ -1308,6 +1388,7 @@
             }
         }
         if (sysToggle) sysToggle.checked = isSystemFilterEnabled();
+        renderColumnToggles();
     }
 
     // ╔══════════════════════════════════════════╗
@@ -1421,7 +1502,7 @@
     }
 
     // ========== 数据导入导出 ==========
-    var DATA_KEYS = [CACHE_KEY, STATUS_KEY, FILTER_KEY, STATUS_FILTER_KEY, STATE_CACHE_KEY, REPORTED_USER_CACHE_KEY, KEYWORD_KEY, SYSTEM_FILTER_KEY];
+    var DATA_KEYS = [CACHE_KEY, STATUS_KEY, FILTER_KEY, STATUS_FILTER_KEY, STATE_CACHE_KEY, REPORTED_USER_CACHE_KEY, KEYWORD_KEY, SYSTEM_FILTER_KEY, COLUMN_VISIBILITY_KEY];
 
     function exportData() {
         var exportObj = {
@@ -1513,7 +1594,7 @@
                         }
                     }
                     saveKeywords(localKw);
-                } else if (key === STATUS_KEY || key === STATE_CACHE_KEY || key === REPORTED_USER_CACHE_KEY) {
+                } else if (key === STATUS_KEY || key === STATE_CACHE_KEY || key === REPORTED_USER_CACHE_KEY || key === COLUMN_VISIBILITY_KEY) {
                     var localObj = {};
                     try { localObj = JSON.parse(localStorage.getItem(key) || '{}'); } catch (e) {}
                     for (var k in imported) {
@@ -1743,6 +1824,13 @@
             setSystemFilter(this.checked);
             refreshTable();
             refreshFilterUI();
+        });
+
+        document.getElementById('nga-column-toggles').addEventListener('change', function(e) {
+            var cb = e.target;
+            if (!cb.classList.contains('col-vis-toggle')) return;
+            setColumnVisibility(cb.getAttribute('data-col'), cb.checked);
+            refreshTable();
         });
 
         document.getElementById('nga-export-data').addEventListener('click', exportData);
