@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA版主举报管理工具
 // @namespace    https://greasyfork.org/zh-CN/scripts/577814-nga%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7
-// @version      1.1.9
+// @version      1.2.0
 // @description  NGA玩家社区网页版版主举报信息查看、筛选与管理工具
 // @author       UST
 // @match        *://bbs.nga.cn/*
@@ -532,7 +532,7 @@
                     '</div>' +
                     '<div class="nga-report-page" data-page="2">' +
                         '<div class="filter-header">关键词监测</div>' +
-                        '<div class="filter-desc">设置关键词后，举报列表中的<b>举报人</b>、<b>帖子标题</b>、<b>举报理由</b>将高亮显示命中的关键词。</div>' +
+                        '<div class="filter-desc">设置关键词后，举报列表中的<b>举报人</b>、<b>帖子标题</b>、<b>被举报人</b>、<b>举报理由</b>将高亮显示命中的关键词。</div>' +
                         '<div class="keyword-toolbar">' +
                             '<input type="text" class="keyword-input" id="nga-kw-text" placeholder="输入关键词" maxlength="50">' +
                             '<input type="color" class="keyword-color-input" id="nga-kw-color" value="#ffff00" title="高亮颜色">' +
@@ -1320,7 +1320,7 @@
         var link = document.createElement('a');
         link.href = 'https://bbs.nga.cn/nuke.php?func=ucp&uid=' + user.uid;
         link.target = '_blank';
-        link.textContent = user.username;
+        link.innerHTML = highlightText(user.username);
         link.title = 'UID: ' + user.uid;
         td.appendChild(link);
     }
