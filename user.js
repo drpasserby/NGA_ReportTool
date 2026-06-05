@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA版主举报管理工具
 // @namespace    https://greasyfork.org/zh-CN/scripts/577814-nga%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7
-// @version      1.2.0
+// @version      1.2.1
 // @description  NGA玩家社区网页版版主举报信息查看、筛选与管理工具
 // @author       UST
 // @match        *://bbs.nga.cn/*
@@ -259,6 +259,8 @@
     var STATUS_CSS = ['status-unprocessed', 'status-processed', 'status-marked'];
     var PAGE_SIZE = 25;
     var currentPage = 0;
+
+    var DATA_KEYS = [CACHE_KEY, STATUS_KEY, FILTER_KEY, STATUS_FILTER_KEY, STATE_CACHE_KEY, REPORTED_USER_CACHE_KEY, KEYWORD_KEY, SYSTEM_FILTER_KEY, COLUMN_VISIBILITY_KEY];
 
     function buildReportKey(r) {
         return r[6] + '_' + r[7] + '_' + r[1] + '_' + r[9];
@@ -1502,8 +1504,6 @@
     }
 
     // ========== 数据导入导出 ==========
-    var DATA_KEYS = [CACHE_KEY, STATUS_KEY, FILTER_KEY, STATUS_FILTER_KEY, STATE_CACHE_KEY, REPORTED_USER_CACHE_KEY, KEYWORD_KEY, SYSTEM_FILTER_KEY, COLUMN_VISIBILITY_KEY];
-
     function exportData() {
         var exportObj = {
             version: 1,
