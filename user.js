@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA版主举报管理工具
 // @namespace    https://greasyfork.org/zh-CN/scripts/577814-nga%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7
-// @version      1.2.3
+// @version      1.2.4
 // @description  NGA玩家社区网页版版主举报信息查看、筛选与管理工具
 // @author       UST
 // @match        *://bbs.nga.cn/*
@@ -312,6 +312,86 @@
     pastelStyleEl.disabled = true;
     document.head.appendChild(pastelStyleEl);
 
+    // 沙漠主题覆写样式
+    var desertStyleEl = document.createElement('style');
+    desertStyleEl.id = 'nga-report-desert-theme';
+    desertStyleEl.textContent = [
+        '#nga-report-panel-overlay.theme-desert #nga-report-panel{background:#FDF4AF;border-color:#34908B;color:#2c3e2d}',
+        '#nga-report-panel-overlay.theme-desert #nga-report-panel-header{background:#34908B;color:#fff}',
+        '#nga-report-panel-overlay.theme-desert #nga-report-panel-close{color:#FDF4AF}',
+        '#nga-report-panel-overlay.theme-desert #nga-report-tabs{background:#6FBEB2;border-color:#34908B}',
+        '#nga-report-panel-overlay.theme-desert #nga-report-tabs .tab-btn{background:#6FBEB2;color:#fff;border-color:#5aad9f}',
+        '#nga-report-panel-overlay.theme-desert #nga-report-tabs .tab-btn:hover{background:#80cec2}',
+        '#nga-report-panel-overlay.theme-desert #nga-report-tabs .tab-btn.active{background:#FDF4AF;color:#2c3e2d;border-color:#FDF4AF}',
+        '#nga-report-panel-overlay.theme-desert #nga-report-stats{background:#f5f0d0;border-color:#d4cfa0}',
+        '#nga-report-panel-overlay.theme-desert #nga-report-stats span{color:#5a5530}',
+        '#nga-report-panel-overlay.theme-desert #nga-report-stats strong{color:#c0392b}',
+        '#nga-report-panel-overlay.theme-desert .toolbar-btn{background:#34908B;color:#fff;border-color:#2a7a75}',
+        '#nga-report-panel-overlay.theme-desert .toolbar-btn:hover{background:#2a7a75}',
+        '#nga-report-panel-overlay.theme-desert .toolbar-btn.danger{background:#d4e6f1;border-color:#6FBEB2;color:#1a5276}',
+        '#nga-report-panel-overlay.theme-desert .toolbar-btn.danger:hover{background:#bdd7ee}',
+        '#nga-report-panel-overlay.theme-desert #nga-report-table th{background:#e8e0c0;color:#2c3e2d;border-color:#d4cfa0}',
+        '#nga-report-panel-overlay.theme-desert #nga-report-table td{border-color:#d4cfa0}',
+        '#nga-report-panel-overlay.theme-desert #nga-report-table tr:nth-child(even) td{background:#faf5e0}',
+        '#nga-report-panel-overlay.theme-desert #nga-report-table tr:hover td{background:#f0ebd0}',
+        '#nga-report-panel-overlay.theme-desert #nga-report-table a{color:#34908B}',
+        '#nga-report-panel-overlay.theme-desert #nga-report-table a:hover{color:#2a7a75}',
+        '#nga-report-panel-overlay.theme-desert .type-topic{background:#d4e6f1;color:#1a5276}',
+        '#nga-report-panel-overlay.theme-desert .type-reply{background:#d5f5e3;color:#1e8449}',
+        '#nga-report-panel-overlay.theme-desert .state-tag{background:#d4e6f1;color:#1a5276}',
+        '#nga-report-panel-overlay.theme-desert .status-unprocessed{background:#e0dcc0;color:#665}',
+        '#nga-report-panel-overlay.theme-desert .status-processed{background:#d4e6f1;color:#1a5276}',
+        '#nga-report-panel-overlay.theme-desert .status-marked{background:#f9e79f;color:#7d6608}',
+        '#nga-report-panel-overlay.theme-desert .status-filter-btn{background:#FDF4AF;border-color:#d4cfa0;color:#5a5530}',
+        '#nga-report-panel-overlay.theme-desert .status-filter-btn:hover{background:#f0e8c0;border-color:#34908B}',
+        '#nga-report-panel-overlay.theme-desert .status-filter-btn.active{background:#34908B;color:#fff;border-color:#34908B}',
+        '#nga-report-panel-overlay.theme-desert .complete-btn{background:#d5f5e3;border-color:#82b366;color:#1e8449}',
+        '#nga-report-panel-overlay.theme-desert .complete-btn:hover{background:#abebc6}',
+        '#nga-report-panel-overlay.theme-desert .complete-btn.is-done{background:#e0dcc0;border-color:#bbb;color:#665}',
+        '#nga-report-panel-overlay.theme-desert .complete-btn.is-done:hover{background:#d0ccb0}',
+        '#nga-report-panel-overlay.theme-desert .mark-btn{background:#f9e79f;border-color:#d4ac0d;color:#7d6608}',
+        '#nga-report-panel-overlay.theme-desert .mark-btn:hover{background:#f5d76e}',
+        '#nga-report-panel-overlay.theme-desert .mark-btn.is-marked{background:#d4e6f1;border-color:#6FBEB2;color:#1a5276}',
+        '#nga-report-panel-overlay.theme-desert .mark-btn.is-marked:hover{background:#bdd7ee}',
+        '#nga-report-panel-overlay.theme-desert #nga-report-loading{color:#8b8554}',
+        '#nga-report-panel-overlay.theme-desert .pagination-btn{background:#FDF4AF;border-color:#d4cfa0;color:#5a5530}',
+        '#nga-report-panel-overlay.theme-desert .pagination-btn:hover{background:#f0e8c0;border-color:#34908B}',
+        '#nga-report-panel-overlay.theme-desert .pagination-btn:disabled{background:#f5f0d0;color:#ccc;border-color:#e0dcc0}',
+        '#nga-report-panel-overlay.theme-desert .pagination-info{color:#5a5530}',
+        '#nga-report-panel-overlay.theme-desert .filter-header{color:#2c3e2d;border-color:#d4cfa0}',
+        '#nga-report-panel-overlay.theme-desert .filter-desc{color:#8b8554}',
+        '#nga-report-panel-overlay.theme-desert .filter-group-title{background:#f0e8c0;border-color:#d4cfa0;color:#2c3e2d}',
+        '#nga-report-panel-overlay.theme-desert .filter-group-title:hover{background:#e8d8b8}',
+        '#nga-report-panel-overlay.theme-desert .filter-item{color:#2c3e2d}',
+        '#nga-report-panel-overlay.theme-desert .filter-item:hover{background:#f0e8c0}',
+        '#nga-report-panel-overlay.theme-desert .filter-item.selected{background:#d5e8d4;border-color:#82b366}',
+        '#nga-report-panel-overlay.theme-desert .filter-count{background:#e8e0c0;color:#5a5530}',
+        '#nga-report-panel-overlay.theme-desert .keyword-input{border-color:#d4cfa0;color:#2c3e2d}',
+        '#nga-report-panel-overlay.theme-desert .keyword-input:focus{border-color:#34908B;box-shadow:0 0 3px rgba(52,144,139,0.3)}',
+        '#nga-report-panel-overlay.theme-desert .keyword-item{border-color:#d4cfa0}',
+        '#nga-report-panel-overlay.theme-desert .keyword-item:hover{background:#faf5e0}',
+        '#nga-report-panel-overlay.theme-desert .keyword-text{color:#2c3e2d}',
+        '#nga-report-panel-overlay.theme-desert .keyword-color-dot{border-color:#34908B}',
+        '#nga-report-panel-overlay.theme-desert .kw-delete-btn{background:#fadbd8;border-color:#e6a8a0;color:#c0392b}',
+        '#nga-report-panel-overlay.theme-desert .kw-delete-btn:hover{background:#f5b7b1}',
+        '#nga-report-panel-overlay.theme-desert .keyword-empty{color:#8b8554}',
+        '#nga-report-panel-overlay.theme-desert .kw-slider{background-color:#d4cfa0}',
+        '#nga-report-panel-overlay.theme-desert .kw-toggle input:checked+.kw-slider{background-color:#34908B}',
+        '#nga-report-panel-overlay.theme-desert .settings-section{background:#faf5e0;border-color:#d4cfa0}',
+        '#nga-report-panel-overlay.theme-desert .settings-section h3{color:#2c3e2d;border-color:#d4cfa0}',
+        '#nga-report-panel-overlay.theme-desert .settings-label{color:#2c3e2d}',
+        '#nga-report-panel-overlay.theme-desert .settings-value{color:#8b8554}',
+        '#nga-report-panel-overlay.theme-desert .settings-btn{background:#FDF4AF;border-color:#d4cfa0;color:#5a5530}',
+        '#nga-report-panel-overlay.theme-desert .settings-btn:hover{background:#f0e8c0;border-color:#34908B}',
+        '#nga-report-panel-overlay.theme-desert .settings-btn.danger{background:#fadbd8;border-color:#e6a8a0;color:#c0392b}',
+        '#nga-report-panel-overlay.theme-desert .settings-btn.danger:hover{background:#f5b7b1}',
+        '#nga-report-panel-overlay.theme-desert .settings-msg{color:#27ae60}',
+        '#nga-report-panel-overlay.theme-desert #nga-report-panel-body::-webkit-scrollbar-track{background:#f5f0d0}',
+        '#nga-report-panel-overlay.theme-desert #nga-report-panel-body::-webkit-scrollbar-thumb{background:#6FBEB2}'
+    ].join('\n');
+    desertStyleEl.disabled = true;
+    document.head.appendChild(desertStyleEl);
+
     // ========== 缓存Key ==========
     var CACHE_KEY = 'nga_report_cache';
     var FILTER_KEY = 'nga_report_filter';
@@ -402,10 +482,10 @@
         var overlay = document.getElementById('nga-report-panel-overlay');
         if (overlay) {
             overlay.classList.toggle('theme-pastel', theme === 'pastel');
+            overlay.classList.toggle('theme-desert', theme === 'desert');
         }
-        if (pastelStyleEl) {
-            pastelStyleEl.disabled = theme !== 'pastel';
-        }
+        if (pastelStyleEl) pastelStyleEl.disabled = theme !== 'pastel';
+        if (desertStyleEl) desertStyleEl.disabled = theme !== 'desert';
     }
 
     function getColumnVisibility() {
@@ -647,9 +727,13 @@
                             '<h3>功能开关</h3>' +
                             '<div class="settings-row"><span class="settings-label">屏蔽系统消息：</span><label class="kw-toggle"><input type="checkbox" id="nga-system-filter-toggle"><span class="kw-slider"></span></label></div>' +
                             '<div class="settings-row" style="flex-wrap:wrap;gap:4px;"><span class="settings-label" style="width:100%;margin-bottom:4px;">显示列：</span><div id="nga-column-toggles" style="display:flex;flex-wrap:wrap;gap:6px;border:1px solid #d4c5a9;border-radius:2px;padding:6px 8px;"></div></div>' +
-                            '<div class="settings-row"><span class="settings-label">主题：</span><div style="display:flex;gap:12px;">' +
+                        '</div>' +
+                        '<div class="settings-section">' +
+                            '<h3>主题</h3>' +
+                            '<div class="settings-row"><div style="display:flex;gap:12px;">' +
                                 '<label style="cursor:pointer;font-size:12px;"><input type="radio" name="nga-theme" value="nga" class="theme-radio"> 原版</label>' +
                                 '<label style="cursor:pointer;font-size:12px;"><input type="radio" name="nga-theme" value="pastel" class="theme-radio"> 浅彩</label>' +
+                                '<label style="cursor:pointer;font-size:12px;"><input type="radio" name="nga-theme" value="desert" class="theme-radio"> 沙漠</label>' +
                             '</div></div>' +
                         '</div>' +
                         '<div class="settings-section">' +
