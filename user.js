@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA版主举报管理工具
 // @namespace    https://greasyfork.org/zh-CN/scripts/577814-nga%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7
-// @version      1.2.2
+// @version      1.2.3
 // @description  NGA玩家社区网页版版主举报信息查看、筛选与管理工具
 // @author       UST
 // @match        *://bbs.nga.cn/*
@@ -232,6 +232,86 @@
     ].join('\n');
     document.head.appendChild(styleEl);
 
+    // 浅彩主题覆写样式
+    var pastelStyleEl = document.createElement('style');
+    pastelStyleEl.id = 'nga-report-pastel-theme';
+    pastelStyleEl.textContent = [
+        '#nga-report-panel-overlay.theme-pastel #nga-report-panel{background:#fff;border-color:#5bcffa;color:#333}',
+        '#nga-report-panel-overlay.theme-pastel #nga-report-panel-header{background:#5bcffa;color:#fff}',
+        '#nga-report-panel-overlay.theme-pastel #nga-report-panel-close{color:#fff}',
+        '#nga-report-panel-overlay.theme-pastel #nga-report-tabs{background:#f5abb9;border-color:#5bcffa}',
+        '#nga-report-panel-overlay.theme-pastel #nga-report-tabs .tab-btn{background:#f5abb9;color:#fff;border-color:#f0a0af}',
+        '#nga-report-panel-overlay.theme-pastel #nga-report-tabs .tab-btn:hover{background:#f8c5cf}',
+        '#nga-report-panel-overlay.theme-pastel #nga-report-tabs .tab-btn.active{background:#fff;color:#333;border-color:#fff}',
+        '#nga-report-panel-overlay.theme-pastel #nga-report-stats{background:#f0f9ff;border-color:#d0e8f5}',
+        '#nga-report-panel-overlay.theme-pastel #nga-report-stats span{color:#555}',
+        '#nga-report-panel-overlay.theme-pastel #nga-report-stats strong{color:#e05060}',
+        '#nga-report-panel-overlay.theme-pastel .toolbar-btn{background:#5bcffa;color:#fff;border-color:#3db8e5}',
+        '#nga-report-panel-overlay.theme-pastel .toolbar-btn:hover{background:#3db8e5}',
+        '#nga-report-panel-overlay.theme-pastel .toolbar-btn.danger{background:#e8f4fd;border-color:#5bcffa;color:#2471a3}',
+        '#nga-report-panel-overlay.theme-pastel .toolbar-btn.danger:hover{background:#d0eafc}',
+        '#nga-report-panel-overlay.theme-pastel #nga-report-table th{background:#e8f4fd;color:#333;border-color:#d0e8f5}',
+        '#nga-report-panel-overlay.theme-pastel #nga-report-table td{border-color:#e0e0e0}',
+        '#nga-report-panel-overlay.theme-pastel #nga-report-table tr:nth-child(even) td{background:#fafafa}',
+        '#nga-report-panel-overlay.theme-pastel #nga-report-table tr:hover td{background:#fff0f3}',
+        '#nga-report-panel-overlay.theme-pastel #nga-report-table a{color:#5bcffa}',
+        '#nga-report-panel-overlay.theme-pastel #nga-report-table a:hover{color:#3db8e5}',
+        '#nga-report-panel-overlay.theme-pastel .type-topic{background:#e8f4fd;color:#2471a3}',
+        '#nga-report-panel-overlay.theme-pastel .type-reply{background:#e8f8e8;color:#1e8449}',
+        '#nga-report-panel-overlay.theme-pastel .state-tag{background:#e8f4fd;color:#2471a3}',
+        '#nga-report-panel-overlay.theme-pastel .status-unprocessed{background:#e0e0e0;color:#666}',
+        '#nga-report-panel-overlay.theme-pastel .status-processed{background:#e8f4fd;color:#2471a3}',
+        '#nga-report-panel-overlay.theme-pastel .status-marked{background:#fff0f3;color:#c0392b}',
+        '#nga-report-panel-overlay.theme-pastel .status-filter-btn{background:#fff;border-color:#d0d0d0;color:#555}',
+        '#nga-report-panel-overlay.theme-pastel .status-filter-btn:hover{background:#f0f0f0;border-color:#5bcffa}',
+        '#nga-report-panel-overlay.theme-pastel .status-filter-btn.active{background:#5bcffa;color:#fff;border-color:#5bcffa}',
+        '#nga-report-panel-overlay.theme-pastel .complete-btn{background:#e8f8e8;border-color:#82b366;color:#1e8449}',
+        '#nga-report-panel-overlay.theme-pastel .complete-btn:hover{background:#c8e8c8}',
+        '#nga-report-panel-overlay.theme-pastel .complete-btn.is-done{background:#e0e0e0;border-color:#bbb;color:#666}',
+        '#nga-report-panel-overlay.theme-pastel .complete-btn.is-done:hover{background:#d0d0d0}',
+        '#nga-report-panel-overlay.theme-pastel .mark-btn{background:#fff0f3;border-color:#f5abb9;color:#c0392b}',
+        '#nga-report-panel-overlay.theme-pastel .mark-btn:hover{background:#fde0e5}',
+        '#nga-report-panel-overlay.theme-pastel .mark-btn.is-marked{background:#e8f4fd;border-color:#5bcffa;color:#2471a3}',
+        '#nga-report-panel-overlay.theme-pastel .mark-btn.is-marked:hover{background:#d0eafc}',
+        '#nga-report-panel-overlay.theme-pastel #nga-report-loading{color:#888}',
+        '#nga-report-panel-overlay.theme-pastel .pagination-btn{background:#fff;border-color:#d0d0d0;color:#555}',
+        '#nga-report-panel-overlay.theme-pastel .pagination-btn:hover{background:#f0f0f0;border-color:#5bcffa}',
+        '#nga-report-panel-overlay.theme-pastel .pagination-btn:disabled{background:#f5f5f5;color:#ccc;border-color:#eee}',
+        '#nga-report-panel-overlay.theme-pastel .pagination-info{color:#555}',
+        '#nga-report-panel-overlay.theme-pastel .filter-header{color:#333;border-color:#e0e0e0}',
+        '#nga-report-panel-overlay.theme-pastel .filter-desc{color:#888}',
+        '#nga-report-panel-overlay.theme-pastel .filter-group-title{background:#f0f9ff;border-color:#d0e8f5;color:#333}',
+        '#nga-report-panel-overlay.theme-pastel .filter-group-title:hover{background:#e0f0fa}',
+        '#nga-report-panel-overlay.theme-pastel .filter-item{color:#333}',
+        '#nga-report-panel-overlay.theme-pastel .filter-item:hover{background:#f0f9ff}',
+        '#nga-report-panel-overlay.theme-pastel .filter-item.selected{background:#e8f8e8;border-color:#82b366}',
+        '#nga-report-panel-overlay.theme-pastel .filter-count{background:#e8f4fd;color:#555}',
+        '#nga-report-panel-overlay.theme-pastel .keyword-input{border-color:#d0d0d0;color:#333}',
+        '#nga-report-panel-overlay.theme-pastel .keyword-input:focus{border-color:#5bcffa;box-shadow:0 0 3px rgba(91,207,250,0.3)}',
+        '#nga-report-panel-overlay.theme-pastel .keyword-item{border-color:#e0e0e0}',
+        '#nga-report-panel-overlay.theme-pastel .keyword-item:hover{background:#fafafa}',
+        '#nga-report-panel-overlay.theme-pastel .keyword-text{color:#333}',
+        '#nga-report-panel-overlay.theme-pastel .keyword-color-dot{border-color:#5bcffa}',
+        '#nga-report-panel-overlay.theme-pastel .kw-delete-btn{background:#ffe0e5;border-color:#f5abb9;color:#c0392b}',
+        '#nga-report-panel-overlay.theme-pastel .kw-delete-btn:hover{background:#fccdd5}',
+        '#nga-report-panel-overlay.theme-pastel .keyword-empty{color:#888}',
+        '#nga-report-panel-overlay.theme-pastel .kw-slider{background-color:#ddd}',
+        '#nga-report-panel-overlay.theme-pastel .kw-toggle input:checked+.kw-slider{background-color:#5bcffa}',
+        '#nga-report-panel-overlay.theme-pastel .settings-section{background:#fafafa;border-color:#e0e0e0}',
+        '#nga-report-panel-overlay.theme-pastel .settings-section h3{color:#333;border-color:#e0e0e0}',
+        '#nga-report-panel-overlay.theme-pastel .settings-label{color:#333}',
+        '#nga-report-panel-overlay.theme-pastel .settings-value{color:#888}',
+        '#nga-report-panel-overlay.theme-pastel .settings-btn{background:#fff;border-color:#d0d0d0;color:#555}',
+        '#nga-report-panel-overlay.theme-pastel .settings-btn:hover{background:#f0f0f0;border-color:#5bcffa}',
+        '#nga-report-panel-overlay.theme-pastel .settings-btn.danger{background:#ffe0e5;border-color:#f5abb9;color:#c0392b}',
+        '#nga-report-panel-overlay.theme-pastel .settings-btn.danger:hover{background:#fccdd5}',
+        '#nga-report-panel-overlay.theme-pastel .settings-msg{color:#27ae60}',
+        '#nga-report-panel-overlay.theme-pastel #nga-report-panel-body::-webkit-scrollbar-track{background:#f0f0f0}',
+        '#nga-report-panel-overlay.theme-pastel #nga-report-panel-body::-webkit-scrollbar-thumb{background:#c0c0c0}'
+    ].join('\n');
+    pastelStyleEl.disabled = true;
+    document.head.appendChild(pastelStyleEl);
+
     // ========== 缓存Key ==========
     var CACHE_KEY = 'nga_report_cache';
     var FILTER_KEY = 'nga_report_filter';
@@ -239,6 +319,7 @@
     var STATUS_FILTER_KEY = 'nga_report_status_filter';
     var KEYWORD_KEY = 'nga_keywords';
     var SYSTEM_FILTER_KEY = 'nga_system_filter';
+    var THEME_KEY = 'nga_theme';
     var COLUMN_VISIBILITY_KEY = 'nga_column_visibility';
     var COLUMNS = [
         { key: 'mark', label: '标记', cls: 'col-mark' },
@@ -260,7 +341,7 @@
     var PAGE_SIZE = 25;
     var currentPage = 0;
 
-    var DATA_KEYS = [CACHE_KEY, STATUS_KEY, FILTER_KEY, STATUS_FILTER_KEY, STATE_CACHE_KEY, REPORTED_USER_CACHE_KEY, KEYWORD_KEY, SYSTEM_FILTER_KEY, COLUMN_VISIBILITY_KEY];
+    var DATA_KEYS = [CACHE_KEY, STATUS_KEY, FILTER_KEY, STATUS_FILTER_KEY, STATE_CACHE_KEY, REPORTED_USER_CACHE_KEY, KEYWORD_KEY, SYSTEM_FILTER_KEY, COLUMN_VISIBILITY_KEY, THEME_KEY];
 
     function buildReportKey(r) {
         return r[6] + '_' + r[7] + '_' + r[1] + '_' + r[9];
@@ -306,6 +387,25 @@
 
     function setSystemFilter(enabled) {
         try { localStorage.setItem(SYSTEM_FILTER_KEY, enabled ? '1' : '0'); } catch (e) {}
+    }
+
+    function getTheme() {
+        try { return localStorage.getItem(THEME_KEY) || 'nga'; } catch (e) { return 'nga'; }
+    }
+
+    function setTheme(theme) {
+        try { localStorage.setItem(THEME_KEY, theme); } catch (e) {}
+        applyTheme(theme);
+    }
+
+    function applyTheme(theme) {
+        var overlay = document.getElementById('nga-report-panel-overlay');
+        if (overlay) {
+            overlay.classList.toggle('theme-pastel', theme === 'pastel');
+        }
+        if (pastelStyleEl) {
+            pastelStyleEl.disabled = theme !== 'pastel';
+        }
     }
 
     function getColumnVisibility() {
@@ -547,6 +647,10 @@
                             '<h3>功能开关</h3>' +
                             '<div class="settings-row"><span class="settings-label">屏蔽系统消息：</span><label class="kw-toggle"><input type="checkbox" id="nga-system-filter-toggle"><span class="kw-slider"></span></label></div>' +
                             '<div class="settings-row" style="flex-wrap:wrap;gap:4px;"><span class="settings-label" style="width:100%;margin-bottom:4px;">显示列：</span><div id="nga-column-toggles" style="display:flex;flex-wrap:wrap;gap:6px;border:1px solid #d4c5a9;border-radius:2px;padding:6px 8px;"></div></div>' +
+                            '<div class="settings-row"><span class="settings-label">主题：</span><div style="display:flex;gap:12px;">' +
+                                '<label style="cursor:pointer;font-size:12px;"><input type="radio" name="nga-theme" value="nga" class="theme-radio"> 原版</label>' +
+                                '<label style="cursor:pointer;font-size:12px;"><input type="radio" name="nga-theme" value="pastel" class="theme-radio"> 浅彩</label>' +
+                            '</div></div>' +
                         '</div>' +
                         '<div class="settings-section">' +
                             '<h3>缓存管理</h3>' +
@@ -1391,6 +1495,8 @@
         }
         if (sysToggle) sysToggle.checked = isSystemFilterEnabled();
         renderColumnToggles();
+        var themeRadio = document.querySelector('.theme-radio[value="' + getTheme() + '"]');
+        if (themeRadio) themeRadio.checked = true;
     }
 
     // ╔══════════════════════════════════════════╗
@@ -1734,6 +1840,7 @@
         var overlay = document.getElementById('nga-report-panel-overlay');
         if (overlay) {
             overlay.classList.add('show');
+            applyTheme(getTheme());
             switchTab(0);
             refreshTable();
             refreshFilterUI();
@@ -1831,6 +1938,11 @@
             if (!cb.classList.contains('col-vis-toggle')) return;
             setColumnVisibility(cb.getAttribute('data-col'), cb.checked);
             refreshTable();
+        });
+
+        document.querySelector('#nga-report-panel-body').addEventListener('change', function(e) {
+            if (!e.target.classList.contains('theme-radio')) return;
+            setTheme(e.target.value);
         });
 
         document.getElementById('nga-export-data').addEventListener('click', exportData);
