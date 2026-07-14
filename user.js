@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA版主举报管理工具
 // @namespace    https://greasyfork.org/zh-CN/scripts/577814-nga%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7
-// @version      1.2.6
+// @version      1.2.7
 // @description  NGA玩家社区网页版版主举报信息查看、筛选与管理工具
 // @author       UST
 // @match        *://bbs.nga.cn/*
@@ -35,7 +35,7 @@
     var styleEl = document.createElement('style');
     styleEl.textContent = [
         // ---- 遮罩与面板容器 ----
-        '#nga-report-panel-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:99999;justify-content:center;align-items:flex-start;padding-top:40px}',
+        '#nga-report-panel-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:3;justify-content:center;align-items:flex-start;padding-top:40px}',
         '#nga-report-panel-overlay.show{display:flex}',
         '#nga-report-panel{width:1100px;max-width:98vw;max-height:85vh;background:#fdf5e6;border:2px solid #ba8b5a;border-radius:3px;display:flex;flex-direction:column;box-shadow:0 0 20px rgba(0,0,0,0.4);font-family:"Microsoft YaHei","PingFang SC","Helvetica Neue",Arial,sans-serif;font-size:13px;color:#492e1b}',
 
@@ -88,7 +88,7 @@
         '#nga-report-table .col-title{min-width:160px}',
         '#nga-report-table .col-reason{min-width:140px}',
         '#nga-report-table .col-forum{width:100px}',
-        '#nga-report-table .col-action{width:72px;text-align:center}',
+        '#nga-report-table .col-action{width:110px;text-align:center}',
 
         // ---- 标签：类型 / 状态 / 标记 ----
         '.type-tag{display:inline-block;padding:1px 6px;border-radius:2px;font-size:11px;font-weight:bold}',
@@ -962,7 +962,7 @@
             btnWrap.style.position = 'fixed';
             btnWrap.style.bottom = '20px';
             btnWrap.style.right = '20px';
-            btnWrap.style.zIndex = '99990';
+            btnWrap.style.zIndex = '3';
             document.body.appendChild(btnWrap);
         }
         return btnWrap;
@@ -1557,7 +1557,8 @@
             var markBtnClass = status === STATUS_MARKED ? 'mark-btn is-marked' : 'mark-btn';
             tdAction.innerHTML =
                 '<button class="' + completeBtnClass + '" data-report-key="' + reportKey + '">完成</button> ' +
-                '<button class="' + markBtnClass + '" data-report-key="' + reportKey + '">标记</button>';
+                '<button class="' + markBtnClass + '" data-report-key="' + reportKey + '">标记</button> ' +
+                (!isSystem ? '<button class="complete-btn" style="background:#e8d8b8;border-color:#ba8b5a;color:#6b4e2e" onclick="commonui.cancelBubble(event);commonui.cancelEvent(event);ubbcode.fastViewPost(event,' + tid + ',' + (pid || 0) + ',0,this)">预览</button>' : '');
             tr.appendChild(tdAction);
 
             tbody.appendChild(tr);
