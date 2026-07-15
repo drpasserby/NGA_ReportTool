@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA版主举报管理工具
 // @namespace    https://greasyfork.org/zh-CN/scripts/577814-nga%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7
-// @version      1.2.7
+// @version      1.3.0
 // @description  NGA玩家社区网页版版主举报信息查看、筛选与管理工具
 // @author       UST
 // @match        *://bbs.nga.cn/*
@@ -88,7 +88,7 @@
         '#nga-report-table .col-title{min-width:160px}',
         '#nga-report-table .col-reason{min-width:140px}',
         '#nga-report-table .col-forum{width:100px}',
-        '#nga-report-table .col-action{width:110px;text-align:center}',
+        '#nga-report-table .col-action{width:72px;text-align:center}',
 
         // ---- 标签：类型 / 状态 / 标记 ----
         '.type-tag{display:inline-block;padding:1px 6px;border-radius:2px;font-size:11px;font-weight:bold}',
@@ -858,6 +858,7 @@
                             '<button id="nga-report-open-unprocessed-btn" class="toolbar-btn danger">打开未处理</button>' +
                         '</div>' +
                         '<div id="nga-report-table-wrap">' +
+                            '<div style="font-size:11px;color:#8b6914;margin-bottom:6px;">温馨提醒：点击"回复"或"主题"标签可以进行快速预览</div>' +
                             '<div id="nga-report-loading">正在加载数据...</div>' +
                             '<table id="nga-report-table" style="display:none;">' +
                                 '<thead><tr id="nga-report-thead-row"></tr></thead>' +
@@ -1474,9 +1475,9 @@
                 if (isSystem) {
                     tdType.innerHTML = '<span class="type-tag" style="background:#e8d8b8;color:#6b4e2e">系统</span>';
                 } else {
-                    tdType.innerHTML = type === 13
-                        ? '<span class="type-tag type-topic">主题</span>'
-                        : '<span class="type-tag type-reply">回复</span>';
+                    var typeLabel = type === 13 ? '主题' : '回复';
+                    var typeCss = type === 13 ? 'type-tag type-topic' : 'type-tag type-reply';
+                    tdType.innerHTML = '<span class="' + typeCss + '" style="cursor:pointer" onclick="commonui.cancelBubble(event);commonui.cancelEvent(event);ubbcode.fastViewPost(event,' + tid + ',' + (pid || 0) + ',0,this)">' + typeLabel + '</span>';
                 }
                 tr.appendChild(tdType);
             }
@@ -1557,8 +1558,7 @@
             var markBtnClass = status === STATUS_MARKED ? 'mark-btn is-marked' : 'mark-btn';
             tdAction.innerHTML =
                 '<button class="' + completeBtnClass + '" data-report-key="' + reportKey + '">完成</button> ' +
-                '<button class="' + markBtnClass + '" data-report-key="' + reportKey + '">标记</button> ' +
-                (!isSystem ? '<button class="complete-btn" style="background:#e8d8b8;border-color:#ba8b5a;color:#6b4e2e" onclick="commonui.cancelBubble(event);commonui.cancelEvent(event);ubbcode.fastViewPost(event,' + tid + ',' + (pid || 0) + ',0,this)">预览</button>' : '');
+                '<button class="' + markBtnClass + '" data-report-key="' + reportKey + '">标记</button>';
             tr.appendChild(tdAction);
 
             tbody.appendChild(tr);
