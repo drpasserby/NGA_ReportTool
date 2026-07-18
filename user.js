@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA版主举报管理工具
 // @namespace    https://greasyfork.org/zh-CN/scripts/577814-nga%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7
-// @version      1.3.0
+// @version      1.3.1
 // @description  NGA玩家社区网页版版主举报信息查看、筛选与管理工具
 // @author       UST
 // @match        *://bbs.nga.cn/*
@@ -1134,7 +1134,7 @@
     function buildForumTree(reports) {
         var forumSet = {};
         for (var i = 0; i < reports.length; i++) {
-            var name = reports[i][2] === '#SYSTEM#' ? '系统消息' : reports[i][13];
+            var name = reports[i][2] === '#SYSTEM#' ? '系统消息' : (reports[i][0] === 10 ? '私信' : reports[i][13]);
             if (name) forumSet[name] = true;
         }
         var tree = {};
@@ -1160,7 +1160,7 @@
         var exact = {};
         var ancestor = {};
         for (var i = 0; i < reports.length; i++) {
-            var forum = reports[i][2] === '#SYSTEM#' ? '系统消息' : reports[i][13];
+            var forum = reports[i][2] === '#SYSTEM#' ? '系统消息' : (reports[i][0] === 10 ? '私信' : reports[i][13]);
             if (!forum) continue;
             exact[forum] = (exact[forum] || 0) + 1;
             var parts = forum.split('>');
@@ -1352,6 +1352,7 @@
             }
             filtered = filtered.filter(function(r) {
                 if (r[2] === '#SYSTEM#' && (ancestorSet['系统消息'] || exactSet['系统消息'])) return true;
+                if (r[0] === 10 && (ancestorSet['私信'] || exactSet['私信'])) return true;
                 var forum = r[13] || '';
                 if (ancestorSet[forum] || exactSet[forum]) return true;
                 var parts = forum.split('>');
@@ -1434,6 +1435,7 @@
             var status = getReportStatus(r);
             var reportKey = buildReportKey(r);
             var isSystem = nickname === '#SYSTEM#';
+            var isPrivate = type === 10;
 
             var tr = document.createElement('tr');
 
@@ -1449,7 +1451,7 @@
             if (isColumnVisible('state')) {
                 var tdState = document.createElement('td');
                 tdState.className = 'col-state';
-                if (isSystem) {
+                if (isSystem || isPrivate) {
                     tdState.innerHTML = '<span style="color:#aaa;font-size:11px;">-</span>';
                 } else {
                     tdState.innerHTML = '<span style="color:#999;font-size:11px;">加载中...</span>';
@@ -1474,6 +1476,8 @@
                 tdType.className = 'col-type';
                 if (isSystem) {
                     tdType.innerHTML = '<span class="type-tag" style="background:#e8d8b8;color:#6b4e2e">系统</span>';
+                } else if (isPrivate) {
+                    tdType.innerHTML = '<span class="type-tag" style="background:#d4e6f1;color:#1a5276">私信</span>';
                 } else {
                     var typeLabel = type === 13 ? '主题' : '回复';
                     var typeCss = type === 13 ? 'type-tag type-topic' : 'type-tag type-reply';
@@ -1505,6 +1509,12 @@
                 tdTitle.className = 'col-title';
                 if (isSystem) {
                     tdTitle.textContent = '系统消息';
+                } else if (isPrivate) {
+                    var titleLink = document.createElement('a');
+                    titleLink.href = 'https://bbs.nga.cn/nuke.php?func=message#mid=' + tid;
+                    titleLink.target = '_blank';
+                    titleLink.textContent = '私信';
+                    tdTitle.appendChild(titleLink);
                 } else {
                     var titleLink = document.createElement('a');
                     if (type === 14 && pid) {
@@ -1526,6 +1536,8 @@
                 tdReportedUser.className = 'col-reported-user';
                 if (isSystem) {
                     tdReportedUser.textContent = '系统消息';
+                } else if (isPrivate) {
+                    tdReportedUser.textContent = '私信';
                 } else {
                     tdReportedUser.innerHTML = '<span style="color:#999;font-size:11px;">加载中...</span>';
                     var ruCacheKey = makeReportedUserCacheKey(type, tid, pid);
@@ -1540,14 +1552,14 @@
             if (isColumnVisible('reason')) {
                 var tdReason = document.createElement('td');
                 tdReason.className = 'col-reason';
-                tdReason.innerHTML = isSystem ? '系统消息' : highlightText(reason);
+                tdReason.innerHTML = isSystem ? '系统消息' : (isPrivate ? '私信' : highlightText(reason));
                 tr.appendChild(tdReason);
             }
 
             if (isColumnVisible('forum')) {
                 var tdForum = document.createElement('td');
                 tdForum.className = 'col-forum';
-                tdForum.textContent = isSystem ? '系统消息' : forum;
+                tdForum.textContent = isSystem ? '系统消息' : (isPrivate ? '私信' : forum);
                 tr.appendChild(tdForum);
             }
 
@@ -1598,7 +1610,7 @@
         if (!tbody) return;
         for (var i = 0; i < pageReports.length; i++) {
             (function(r, row) {
-                if (r[2] === '#SYSTEM#') return;
+                if (r[2] === '#SYSTEM#' || r[0] === 10) return;
                 var rptType = r[0], rptTid = r[6], rptPid = r[7];
                 var stateTd = row.querySelector('.col-state');
                 var ruTd = row.querySelector('.col-reported-user');
