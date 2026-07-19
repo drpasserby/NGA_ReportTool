@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA版主举报管理工具
 // @namespace    https://greasyfork.org/zh-CN/scripts/577814-nga%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7
-// @version      1.3.1
+// @version      1.3.2
 // @description  NGA玩家社区网页版版主举报信息查看、筛选与管理工具
 // @author       UST
 // @match        *://bbs.nga.cn/*
@@ -105,15 +105,19 @@
         '.status-filter-btn:hover{background:#e8d8b8;border-color:#8b6914}',
         '.status-filter-btn.active{background:#492e1b;color:#fdf5e6;border-color:#492e1b}',
 
-        // ---- 操作按钮：完成 / 标记 ----
-        '.complete-btn{display:inline-block;padding:2px 8px;margin:1px 2px;font-size:11px;cursor:pointer;background:#d5f5e3;border:1px solid #82b366;color:#1e8449;border-radius:2px;white-space:nowrap}',
-        '.complete-btn:hover{background:#abebc6}',
-        '.complete-btn.is-done{background:#d5d5d5;border-color:#aaa;color:#555}',
-        '.complete-btn.is-done:hover{background:#c0c0c0}',
-        '.mark-btn{display:inline-block;padding:2px 8px;margin:1px 2px;font-size:11px;cursor:pointer;background:#f9e79f;border:1px solid #d4ac0d;color:#7d6608;border-radius:2px;white-space:nowrap}',
-        '.mark-btn:hover{background:#f5d76e}',
-        '.mark-btn.is-marked{background:#d4e6f1;border-color:#5b9bd5;color:#1a5276}',
-        '.mark-btn.is-marked:hover{background:#bdd7ee}',
+        // ---- 操作按钮：状态下拉 ----
+        '.act-dropdown{position:relative;display:inline-block}',
+        '.act-dropdown-btn{padding:2px 8px;font-size:11px;cursor:pointer;background:#fdf5e6;border:1px solid #c4a87c;color:#6b4e2e;border-radius:2px;white-space:nowrap}',
+        '.act-dropdown-btn:hover{background:#e8d8b8}',
+        '.act-dropdown-menu{display:none;position:absolute;right:0;top:100%;z-index:10;background:#fff;border:1px solid #c4a87c;border-radius:2px;box-shadow:0 2px 6px rgba(0,0,0,0.15);min-width:56px;padding:2px 0}',
+        '.act-dropdown.open .act-dropdown-menu{display:block}',
+        '.act-dropdown-menu button{display:block;width:100%;padding:4px 10px;font-size:11px;cursor:pointer;border:none;background:none;text-align:center;white-space:nowrap}',
+        '.act-dropdown-menu button:hover{background:#f0e8d5}',
+        '.act-item-complete{color:#1e8449}',
+        '.act-item-mark{color:#7d6608}',
+        '.act-item-unread{color:#c0392b}',
+        // 桌面端 hover 展开
+        '@media(hover:hover){.act-dropdown:hover .act-dropdown-menu{display:block}}',
 
         // ---- 加载提示 ----
         '#nga-report-loading{text-align:center;padding:40px;color:#8b6914;font-size:14px}',
@@ -206,7 +210,8 @@
             '.type-tag,.state-tag,.status-tag{font-size:10px;padding:2px 5px}',
             '.state-tag{margin:2px 1px}',
             // 操作按钮
-            '.complete-btn,.mark-btn{padding:4px 10px;font-size:12px;margin:2px}',
+            '.act-dropdown-btn{padding:4px 10px;font-size:12px}',
+            '.act-dropdown-menu button{padding:6px 12px;font-size:13px}',
             // 状态筛选按钮
             '.status-filter-btn{padding:6px 14px;font-size:13px;margin:2px}',
             // 分页
@@ -1566,36 +1571,57 @@
             // 操作列始终显示
             var tdAction = document.createElement('td');
             tdAction.className = 'col-action';
-            var completeBtnClass = status === STATUS_PROCESSED ? 'complete-btn is-done' : 'complete-btn';
-            var markBtnClass = status === STATUS_MARKED ? 'mark-btn is-marked' : 'mark-btn';
+            var statusLabel = STATUS_LABELS[status];
             tdAction.innerHTML =
-                '<button class="' + completeBtnClass + '" data-report-key="' + reportKey + '">完成</button> ' +
-                '<button class="' + markBtnClass + '" data-report-key="' + reportKey + '">标记</button>';
+                '<div class="act-dropdown">' +
+                    '<button class="act-dropdown-btn">' + statusLabel + '</button>' +
+                    '<div class="act-dropdown-menu">' +
+                        '<button class="act-item-complete" data-report-key="' + reportKey + '" data-act="complete">完成</button>' +
+                        '<button class="act-item-mark" data-report-key="' + reportKey + '" data-act="mark">标记</button>' +
+                        '<button class="act-item-unread" data-report-key="' + reportKey + '" data-act="unread">未读</button>' +
+                    '</div>' +
+                '</div>';
             tr.appendChild(tdAction);
 
             tbody.appendChild(tr);
         }
 
-        // 事件委托：操作按钮
+        // 事件委托：操作按钮 + 下拉
         tbody.onclick = function(e) {
             var target = e.target;
+            // 下拉按钮：切换 open
+            if (target.classList.contains('act-dropdown-btn')) {
+                var dd = target.closest('.act-dropdown');
+                if (dd) {
+                    var wasOpen = dd.classList.contains('open');
+                    // 关闭所有下拉
+                    var allDds = tbody.querySelectorAll('.act-dropdown.open');
+                    for (var d = 0; d < allDds.length; d++) {
+                        allDds[d].classList.remove('open');
+                    }
+                    if (!wasOpen) dd.classList.add('open');
+                }
+                return;
+            }
+            // 菜单项点击
             var rk = target.getAttribute('data-report-key');
-            if (!rk) return;
+            var act = target.getAttribute('data-act');
+            if (!rk || !act) return;
             var map = getStatusMap();
             var currentStatus = map.hasOwnProperty(rk) ? map[rk] : STATUS_UNPROCESSED;
-            if (target.classList.contains('complete-btn')) {
-                // 完成按钮：未处理 → 已处理；已处理 → 未处理
+            if (act === 'complete') {
                 var newStatus = (currentStatus === STATUS_PROCESSED) ? STATUS_UNPROCESSED : STATUS_PROCESSED;
                 map[rk] = newStatus;
                 saveStatusMap(map);
-                refreshTable(true);
-            } else if (target.classList.contains('mark-btn')) {
-                // 标记按钮：已标记 → 已处理；其他 → 已标记
+            } else if (act === 'mark') {
                 var newStatus = (currentStatus === STATUS_MARKED) ? STATUS_PROCESSED : STATUS_MARKED;
                 map[rk] = newStatus;
                 saveStatusMap(map);
-                refreshTable(true);
+            } else if (act === 'unread') {
+                map[rk] = STATUS_UNPROCESSED;
+                saveStatusMap(map);
             }
+            refreshTable(true);
         };
 
         // 异步加载当前页帖子状态
@@ -2260,6 +2286,16 @@
 
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') hidePanel();
+        });
+
+        // 点击面板外部关闭下拉
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.act-dropdown')) {
+                var openDds = document.querySelectorAll('.act-dropdown.open');
+                for (var d = 0; d < openDds.length; d++) {
+                    openDds[d].classList.remove('open');
+                }
+            }
         });
 
         log('事件绑定完成');
