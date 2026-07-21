@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA版主举报管理工具
 // @namespace    https://greasyfork.org/zh-CN/scripts/577814-nga%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7
-// @version      1.3.2
+// @version      1.3.3
 // @description  NGA玩家社区网页版版主举报信息查看、筛选与管理工具
 // @author       UST
 // @match        *://bbs.nga.cn/*
@@ -119,6 +119,28 @@
         // 桌面端 hover 展开
         '@media(hover:hover){.act-dropdown:hover .act-dropdown-menu{display:block}}',
 
+        // ---- 搜索弹窗 ----
+        '#nga-search-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9995;justify-content:center;align-items:flex-start;padding-top:60px}',
+        '#nga-search-overlay.show{display:flex}',
+        '#nga-search-dialog{width:700px;max-width:95vw;max-height:80vh;background:#fdf5e6;border:2px solid #ba8b5a;border-radius:3px;display:flex;flex-direction:column;box-shadow:0 0 20px rgba(0,0,0,0.4)}',
+        '#nga-search-dialog-header{background:#492e1b;color:#fdf5e6;padding:8px 14px;display:flex;justify-content:space-between;align-items:center}',
+        '#nga-search-dialog-header span{font-size:14px;font-weight:bold}',
+        '#nga-search-close{cursor:pointer;font-size:18px;color:#e0c090}',
+        '#nga-search-close:hover{color:#fff}',
+        '#nga-search-body{padding:12px}',
+        '#nga-search-input-wrap{display:flex;gap:8px;margin-bottom:12px}',
+        '#nga-search-input{flex:1;padding:6px 10px;font-size:13px;border:1px solid #c4a87c;border-radius:2px;color:#492e1b;outline:none}',
+        '#nga-search-input:focus{border-color:#8b6914}',
+        '#nga-search-result{flex:1;overflow-y:auto;font-size:12px}',
+        '#nga-search-result table{width:100%;border-collapse:collapse}',
+        '#nga-search-result th{background:#e0cfa6;color:#492e1b;padding:5px 6px;border:1px solid #c4a87c;font-size:11px;white-space:nowrap}',
+        '#nga-search-result td{padding:4px 6px;border:1px solid #d4c5a9;font-size:11px}',
+        '#nga-search-result tr:nth-child(even) td{background:#faf7f0}',
+        '#nga-search-result tr:hover td{background:#f0e4cc}',
+        '#nga-search-result a{color:#b56700;text-decoration:none}',
+        '#nga-search-result a:hover{color:#8b3a00}',
+        '#nga-search-empty{text-align:center;padding:20px;color:#8b6914}',
+
         // ---- 加载提示 ----
         '#nga-report-loading{text-align:center;padding:40px;color:#8b6914;font-size:14px}',
 
@@ -231,6 +253,10 @@
             // 设置页
             '.settings-row{flex-direction:column;align-items:flex-start;gap:4px}',
             '.settings-btn{padding:8px 18px;font-size:13px}',
+            // 搜索
+            '#nga-search-overlay{padding-top:20px}',
+            '#nga-search-dialog{max-width:100vw;max-height:90vh}',
+            '#nga-search-input{font-size:16px}',
             // 加载
             '#nga-report-loading{padding:30px;font-size:15px}',
         '}'
@@ -312,7 +338,15 @@
         '#nga-report-panel-overlay.theme-pastel .settings-btn.danger:hover{background:#fccdd5}',
         '#nga-report-panel-overlay.theme-pastel .settings-msg{color:#27ae60}',
         '#nga-report-panel-overlay.theme-pastel #nga-report-panel-body::-webkit-scrollbar-track{background:#f0f0f0}',
-        '#nga-report-panel-overlay.theme-pastel #nga-report-panel-body::-webkit-scrollbar-thumb{background:#c0c0c0}'
+        '#nga-report-panel-overlay.theme-pastel #nga-report-panel-body::-webkit-scrollbar-thumb{background:#c0c0c0}',
+        '#nga-search-overlay.theme-pastel #nga-search-dialog{background:#fff;border-color:#5bcffa}',
+        '#nga-search-overlay.theme-pastel #nga-search-dialog-header{background:#5bcffa;color:#fff}',
+        '#nga-search-overlay.theme-pastel #nga-search-close{color:#fff}',
+        '#nga-search-overlay.theme-pastel #nga-search-result th{background:#e8f4fd;color:#333;border-color:#d0e8f5}',
+        '#nga-search-overlay.theme-pastel #nga-search-result td{border-color:#e0e0e0}',
+        '#nga-search-overlay.theme-pastel #nga-search-result tr:nth-child(even) td{background:#fafafa}',
+        '#nga-search-overlay.theme-pastel #nga-search-input{border-color:#d0d0d0;color:#333}',
+        '#nga-search-overlay.theme-pastel #nga-search-input:focus{border-color:#5bcffa}'
     ].join('\n');
     pastelStyleEl.disabled = true;
     document.head.appendChild(pastelStyleEl);
@@ -392,7 +426,15 @@
         '#nga-report-panel-overlay.theme-desert .settings-btn.danger:hover{background:#f5b7b1}',
         '#nga-report-panel-overlay.theme-desert .settings-msg{color:#27ae60}',
         '#nga-report-panel-overlay.theme-desert #nga-report-panel-body::-webkit-scrollbar-track{background:#f5f0d0}',
-        '#nga-report-panel-overlay.theme-desert #nga-report-panel-body::-webkit-scrollbar-thumb{background:#6FBEB2}'
+        '#nga-report-panel-overlay.theme-desert #nga-report-panel-body::-webkit-scrollbar-thumb{background:#6FBEB2}',
+        '#nga-search-overlay.theme-desert #nga-search-dialog{background:#FDF4AF;border-color:#34908B}',
+        '#nga-search-overlay.theme-desert #nga-search-dialog-header{background:#34908B;color:#fff}',
+        '#nga-search-overlay.theme-desert #nga-search-close{color:#FDF4AF}',
+        '#nga-search-overlay.theme-desert #nga-search-result th{background:#e8e0c0;color:#2c3e2d;border-color:#d4cfa0}',
+        '#nga-search-overlay.theme-desert #nga-search-result td{border-color:#d4cfa0}',
+        '#nga-search-overlay.theme-desert #nga-search-result tr:nth-child(even) td{background:#faf5e0}',
+        '#nga-search-overlay.theme-desert #nga-search-input{border-color:#d4cfa0;color:#2c3e2d}',
+        '#nga-search-overlay.theme-desert #nga-search-input:focus{border-color:#34908B}'
     ].join('\n');
     desertStyleEl.disabled = true;
     document.head.appendChild(desertStyleEl);
@@ -472,7 +514,15 @@
         '#nga-report-panel-overlay.theme-camo .settings-btn.danger:hover{background:#f5b7b1}',
         '#nga-report-panel-overlay.theme-camo .settings-msg{color:#27ae60}',
         '#nga-report-panel-overlay.theme-camo #nga-report-panel-body::-webkit-scrollbar-track{background:#e8e8e8}',
-        '#nga-report-panel-overlay.theme-camo #nga-report-panel-body::-webkit-scrollbar-thumb{background:#B7B89F}'
+        '#nga-report-panel-overlay.theme-camo #nga-report-panel-body::-webkit-scrollbar-thumb{background:#B7B89F}',
+        '#nga-search-overlay.theme-camo #nga-search-dialog{background:#EEE;border-color:#777C6D}',
+        '#nga-search-overlay.theme-camo #nga-search-dialog-header{background:#777C6D;color:#EEE}',
+        '#nga-search-overlay.theme-camo #nga-search-close{color:#CBCBCB}',
+        '#nga-search-overlay.theme-camo #nga-search-result th{background:#d8d9c8;color:#444;border-color:#CBCBCB}',
+        '#nga-search-overlay.theme-camo #nga-search-result td{border-color:#CBCBCB}',
+        '#nga-search-overlay.theme-camo #nga-search-result tr:nth-child(even) td{background:#f5f5f5}',
+        '#nga-search-overlay.theme-camo #nga-search-input{border-color:#CBCBCB;color:#444}',
+        '#nga-search-overlay.theme-camo #nga-search-input:focus{border-color:#777C6D}'
     ].join('\n');
     camoStyleEl.disabled = true;
     document.head.appendChild(camoStyleEl);
@@ -552,7 +602,15 @@
         '#nga-report-panel-overlay.theme-darkgreen .settings-btn.danger:hover{background:#4a2828}',
         '#nga-report-panel-overlay.theme-darkgreen .settings-msg{color:#1F7D53}',
         '#nga-report-panel-overlay.theme-darkgreen #nga-report-panel-body::-webkit-scrollbar-track{background:#1e2d14}',
-        '#nga-report-panel-overlay.theme-darkgreen #nga-report-panel-body::-webkit-scrollbar-thumb{background:#255F38}'
+        '#nga-report-panel-overlay.theme-darkgreen #nga-report-panel-body::-webkit-scrollbar-thumb{background:#255F38}',
+        '#nga-search-overlay.theme-darkgreen #nga-search-dialog{background:#18230F;border-color:#1F7D53}',
+        '#nga-search-overlay.theme-darkgreen #nga-search-dialog-header{background:#1F7D53;color:#e0f0e0}',
+        '#nga-search-overlay.theme-darkgreen #nga-search-close{color:#8fbf8f}',
+        '#nga-search-overlay.theme-darkgreen #nga-search-result th{background:#27391C;color:#c8d6c0;border-color:#255F38}',
+        '#nga-search-overlay.theme-darkgreen #nga-search-result td{border-color:#1e2d14;color:#b0c8a0}',
+        '#nga-search-overlay.theme-darkgreen #nga-search-result tr:nth-child(even) td{background:#1e2d14}',
+        '#nga-search-overlay.theme-darkgreen #nga-search-input{border-color:#255F38;color:#c8d6c0;background:#1e2d14}',
+        '#nga-search-overlay.theme-darkgreen #nga-search-input:focus{border-color:#1F7D53}'
     ].join('\n');
     darkGreenStyleEl.disabled = true;
     document.head.appendChild(darkGreenStyleEl);
@@ -861,6 +919,7 @@
                             '<button id="nga-report-refresh-btn" class="toolbar-btn">刷新数据</button>' +
                             '<button id="nga-report-batch-complete-btn" class="toolbar-btn danger">一键完成</button>' +
                             '<button id="nga-report-open-unprocessed-btn" class="toolbar-btn danger">打开未处理</button>' +
+                            '<button id="nga-report-search-btn" class="toolbar-btn danger">搜索</button>' +
                         '</div>' +
                         '<div id="nga-report-table-wrap">' +
                             '<div style="font-size:11px;color:#8b6914;margin-bottom:6px;">温馨提醒：点击"回复"或"主题"标签可以进行快速预览</div>' +
@@ -939,6 +998,26 @@
                 '</div>' +
             '</div>';
         document.body.appendChild(overlay);
+
+        // 搜索弹窗
+        var searchOverlay = document.createElement('div');
+        searchOverlay.id = 'nga-search-overlay';
+        searchOverlay.innerHTML =
+            '<div id="nga-search-dialog">' +
+                '<div id="nga-search-dialog-header">' +
+                    '<span>搜索举报</span>' +
+                    '<span id="nga-search-close" title="关闭">✕</span>' +
+                '</div>' +
+                '<div id="nga-search-body">' +
+                    '<div id="nga-search-input-wrap">' +
+                        '<input type="text" id="nga-search-input" placeholder="输入关键词搜索举报内容、标题、理由、被举报人...">' +
+                        '<button class="settings-btn" id="nga-search-do">搜索</button>' +
+                    '</div>' +
+                    '<div id="nga-search-result"></div>' +
+                '</div>' +
+            '</div>';
+        document.body.appendChild(searchOverlay);
+
         log('面板DOM已创建');
         return overlay;
     }
@@ -2123,6 +2202,77 @@
         container.innerHTML = html;
     }
 
+    // ========== 搜索 ==========
+    function showSearch() {
+        var overlay = document.getElementById('nga-search-overlay');
+        if (overlay) {
+            var theme = getTheme();
+            overlay.className = overlay.className.replace(/theme-\w+/g, '');
+            if (theme !== 'nga') overlay.classList.add('theme-' + theme);
+            overlay.classList.add('show');
+            document.getElementById('nga-search-input').value = '';
+            document.getElementById('nga-search-result').innerHTML = '';
+            document.getElementById('nga-search-input').focus();
+        }
+    }
+
+    function hideSearch() {
+        var overlay = document.getElementById('nga-search-overlay');
+        if (overlay) overlay.classList.remove('show');
+    }
+
+    function doSearch() {
+        var query = document.getElementById('nga-search-input').value.trim().toLowerCase();
+        var resultDiv = document.getElementById('nga-search-result');
+        if (!query) {
+            resultDiv.innerHTML = '<div class="nga-search-empty">请输入搜索关键词</div>';
+            return;
+        }
+        var reports = getAllReports();
+        var ruCache = getReportedUserCache();
+        var results = [];
+        for (var i = 0; i < reports.length; i++) {
+            var r = reports[i];
+            var title = String(r[5] || '').toLowerCase();
+            var reason = String(r[11] || '').toLowerCase();
+            var reporter = String(r[2] || '').toLowerCase();
+            // 被举报人
+            var ruKey = makeReportedUserCacheKey(r[0], r[6], r[7]);
+            var ru = ruCache[ruKey];
+            var ruName = ru ? String(ru.username || '').toLowerCase() : '';
+            if (title.indexOf(query) >= 0 || reason.indexOf(query) >= 0 ||
+                reporter.indexOf(query) >= 0 || ruName.indexOf(query) >= 0) {
+                results.push({ r: r, ru: ru });
+            }
+        }
+        if (results.length === 0) {
+            resultDiv.innerHTML = '<div class="nga-search-empty">未找到匹配结果</div>';
+            return;
+        }
+        var html = '<table><thead><tr><th>时间</th><th>类型</th><th>举报人</th><th>标题/理由</th><th>被举报人</th><th>版块</th></tr></thead><tbody>';
+        for (var j = 0; j < results.length; j++) {
+            var item = results[j];
+            var rp = item.r;
+            var typeLabel = rp[0] === 13 ? '主题' : (rp[0] === 10 ? '私信' : (rp[2] === '#SYSTEM#' ? '系统' : '回复'));
+            var reporterName = rp[2] === '#SYSTEM#' ? '系统' : rp[2];
+            var titleText = rp[2] === '#SYSTEM#' ? '系统消息' : (rp[0] === 10 ? '私信' : (rp[5] || ''));
+            var reasonText = rp[2] === '#SYSTEM#' ? '系统消息' : (rp[0] === 10 ? '私信' : (rp[11] || ''));
+            var forumText = rp[2] === '#SYSTEM#' ? '系统消息' : (rp[0] === 10 ? '私信' : (rp[13] || ''));
+            var ruName2 = item.ru ? item.ru.username : '-';
+            var timeStr = formatTimestamp(rp[9]);
+            html += '<tr>' +
+                '<td style="white-space:nowrap">' + timeStr + '</td>' +
+                '<td>' + typeLabel + '</td>' +
+                '<td>' + escapeHtml(reporterName) + '</td>' +
+                '<td>' + escapeHtml(titleText) + '<br><span style="color:#888">' + escapeHtml(reasonText) + '</span></td>' +
+                '<td>' + escapeHtml(ruName2) + '</td>' +
+                '<td>' + escapeHtml(forumText) + '</td>' +
+            '</tr>';
+        }
+        html += '</tbody></table>';
+        resultDiv.innerHTML = html;
+    }
+
     // ========== 面板显示/隐藏 ==========
     function showPanel() {
         log('显示面板');
@@ -2186,6 +2336,19 @@
         document.getElementById('nga-report-open-unprocessed-btn').addEventListener('click', function() {
             log('打开未处理按钮被点击');
             openUnprocessed();
+        });
+
+        document.getElementById('nga-report-search-btn').addEventListener('click', function() {
+            showSearch();
+        });
+
+        document.getElementById('nga-search-close').addEventListener('click', hideSearch);
+        document.getElementById('nga-search-overlay').addEventListener('click', function(e) {
+            if (e.target === this) hideSearch();
+        });
+        document.getElementById('nga-search-do').addEventListener('click', doSearch);
+        document.getElementById('nga-search-input').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') doSearch();
         });
 
         document.getElementById('nga-report-stats').addEventListener('click', function(e) {
@@ -2285,7 +2448,14 @@
         });
 
         document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') hidePanel();
+            if (e.key === 'Escape') {
+                var searchOverlay = document.getElementById('nga-search-overlay');
+                if (searchOverlay && searchOverlay.classList.contains('show')) {
+                    hideSearch();
+                } else {
+                    hidePanel();
+                }
+            }
         });
 
         // 点击面板外部关闭下拉
