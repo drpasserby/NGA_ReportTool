@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA版主举报管理工具
 // @namespace    https://greasyfork.org/zh-CN/scripts/577814-nga%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7
-// @version      1.3.3
+// @version      1.3.4
 // @description  NGA玩家社区网页版版主举报信息查看、筛选与管理工具
 // @author       UST
 // @match        *://bbs.nga.cn/*
@@ -120,18 +120,18 @@
         '@media(hover:hover){.act-dropdown:hover .act-dropdown-menu{display:block}}',
 
         // ---- 搜索弹窗 ----
-        '#nga-search-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9995;justify-content:center;align-items:flex-start;padding-top:60px}',
+        '#nga-search-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:4;justify-content:center;align-items:flex-start;padding-top:60px}',
         '#nga-search-overlay.show{display:flex}',
-        '#nga-search-dialog{width:700px;max-width:95vw;max-height:80vh;background:#fdf5e6;border:2px solid #ba8b5a;border-radius:3px;display:flex;flex-direction:column;box-shadow:0 0 20px rgba(0,0,0,0.4)}',
-        '#nga-search-dialog-header{background:#492e1b;color:#fdf5e6;padding:8px 14px;display:flex;justify-content:space-between;align-items:center}',
+        '#nga-search-dialog{width:700px;max-width:95vw;max-height:80vh;background:#fdf5e6;border:2px solid #ba8b5a;border-radius:3px;display:flex;flex-direction:column;box-shadow:0 0 20px rgba(0,0,0,0.4);overflow:hidden}',
+        '#nga-search-dialog-header{background:#492e1b;color:#fdf5e6;padding:8px 14px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0}',
         '#nga-search-dialog-header span{font-size:14px;font-weight:bold}',
         '#nga-search-close{cursor:pointer;font-size:18px;color:#e0c090}',
         '#nga-search-close:hover{color:#fff}',
-        '#nga-search-body{padding:12px}',
-        '#nga-search-input-wrap{display:flex;gap:8px;margin-bottom:12px}',
+        '#nga-search-body{padding:12px;overflow:hidden;display:flex;flex-direction:column;flex:1;min-height:0}',
+        '#nga-search-input-wrap{display:flex;gap:8px;margin-bottom:12px;flex-shrink:0}',
         '#nga-search-input{flex:1;padding:6px 10px;font-size:13px;border:1px solid #c4a87c;border-radius:2px;color:#492e1b;outline:none}',
         '#nga-search-input:focus{border-color:#8b6914}',
-        '#nga-search-result{flex:1;overflow-y:auto;font-size:12px}',
+        '#nga-search-result{flex:1;overflow-y:auto;font-size:12px;min-height:0}',
         '#nga-search-result table{width:100%;border-collapse:collapse}',
         '#nga-search-result th{background:#e0cfa6;color:#492e1b;padding:5px 6px;border:1px solid #c4a87c;font-size:11px;white-space:nowrap}',
         '#nga-search-result td{padding:4px 6px;border:1px solid #d4c5a9;font-size:11px}',
