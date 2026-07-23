@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA版主举报管理工具
 // @namespace    https://greasyfork.org/zh-CN/scripts/577814-nga%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7
-// @version      1.3.4
+// @version      1.3.5
 // @description  NGA玩家社区网页版版主举报信息查看、筛选与管理工具
 // @author       UST
 // @match        *://bbs.nga.cn/*
@@ -1010,7 +1010,7 @@
                 '</div>' +
                 '<div id="nga-search-body">' +
                     '<div id="nga-search-input-wrap">' +
-                        '<input type="text" id="nga-search-input" placeholder="输入关键词搜索举报内容、标题、理由、被举报人...">' +
+                        '<input type="text" id="nga-search-input" placeholder="输入关键词搜索举报内容、标题、理由...">' +
                         '<button class="settings-btn" id="nga-search-do">搜索</button>' +
                     '</div>' +
                     '<div id="nga-search-result"></div>' +
@@ -2230,43 +2230,44 @@
             return;
         }
         var reports = getAllReports();
-        var ruCache = getReportedUserCache();
         var results = [];
         for (var i = 0; i < reports.length; i++) {
             var r = reports[i];
             var title = String(r[5] || '').toLowerCase();
             var reason = String(r[11] || '').toLowerCase();
-            var reporter = String(r[2] || '').toLowerCase();
-            // 被举报人
-            var ruKey = makeReportedUserCacheKey(r[0], r[6], r[7]);
-            var ru = ruCache[ruKey];
-            var ruName = ru ? String(ru.username || '').toLowerCase() : '';
-            if (title.indexOf(query) >= 0 || reason.indexOf(query) >= 0 ||
-                reporter.indexOf(query) >= 0 || ruName.indexOf(query) >= 0) {
-                results.push({ r: r, ru: ru });
+            if (title.indexOf(query) >= 0 || reason.indexOf(query) >= 0) {
+                results.push(r);
             }
         }
         if (results.length === 0) {
             resultDiv.innerHTML = '<div class="nga-search-empty">未找到匹配结果</div>';
             return;
         }
-        var html = '<table><thead><tr><th>时间</th><th>类型</th><th>举报人</th><th>标题/理由</th><th>被举报人</th><th>版块</th></tr></thead><tbody>';
+        var html = '<table><thead><tr><th>时间</th><th>类型</th><th>标题/理由</th><th>版块</th></tr></thead><tbody>';
         for (var j = 0; j < results.length; j++) {
-            var item = results[j];
-            var rp = item.r;
+            var rp = results[j];
             var typeLabel = rp[0] === 13 ? '主题' : (rp[0] === 10 ? '私信' : (rp[2] === '#SYSTEM#' ? '系统' : '回复'));
-            var reporterName = rp[2] === '#SYSTEM#' ? '系统' : rp[2];
             var titleText = rp[2] === '#SYSTEM#' ? '系统消息' : (rp[0] === 10 ? '私信' : (rp[5] || ''));
             var reasonText = rp[2] === '#SYSTEM#' ? '系统消息' : (rp[0] === 10 ? '私信' : (rp[11] || ''));
             var forumText = rp[2] === '#SYSTEM#' ? '系统消息' : (rp[0] === 10 ? '私信' : (rp[13] || ''));
-            var ruName2 = item.ru ? item.ru.username : '-';
             var timeStr = formatTimestamp(rp[9]);
+            // 构建标题链接
+            var titleHtml;
+            if (rp[2] === '#SYSTEM#' || rp[0] === 10) {
+                titleHtml = escapeHtml(titleText);
+            } else {
+                var linkUrl;
+                if (rp[0] === 14 && rp[7]) {
+                    linkUrl = 'https://bbs.nga.cn/read.php?tid=' + rp[6] + '&pid=' + rp[7] + '&to=1';
+                } else {
+                    linkUrl = 'https://bbs.nga.cn/read.php?tid=' + rp[6];
+                }
+                titleHtml = '<a href="' + linkUrl + '" target="_blank">' + escapeHtml(titleText) + '</a>';
+            }
             html += '<tr>' +
                 '<td style="white-space:nowrap">' + timeStr + '</td>' +
                 '<td>' + typeLabel + '</td>' +
-                '<td>' + escapeHtml(reporterName) + '</td>' +
-                '<td>' + escapeHtml(titleText) + '<br><span style="color:#888">' + escapeHtml(reasonText) + '</span></td>' +
-                '<td>' + escapeHtml(ruName2) + '</td>' +
+                '<td>' + titleHtml + '<br><span style="color:#888">' + escapeHtml(reasonText) + '</span></td>' +
                 '<td>' + escapeHtml(forumText) + '</td>' +
             '</tr>';
         }
