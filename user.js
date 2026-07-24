@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA版主举报管理工具
 // @namespace    https://greasyfork.org/zh-CN/scripts/577814-nga%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7
-// @version      1.3.5
+// @version      1.3.6
 // @description  NGA玩家社区网页版版主举报信息查看、筛选与管理工具
 // @author       UST
 // @match        *://bbs.nga.cn/*
@@ -2243,7 +2243,8 @@
             resultDiv.innerHTML = '<div class="nga-search-empty">未找到匹配结果</div>';
             return;
         }
-        var html = '<table><thead><tr><th>时间</th><th>类型</th><th>标题/理由</th><th>版块</th></tr></thead><tbody>';
+        var html = '<div style="font-size:12px;color:#6b4e2e;margin-bottom:8px;">共搜到 ' + results.length + ' 个包含关键词"' + escapeHtml(query) + '"的举报</div>';
+        html += '<table><thead><tr><th>时间</th><th>类型</th><th>标题/理由</th><th>版块</th></tr></thead><tbody>';
         for (var j = 0; j < results.length; j++) {
             var rp = results[j];
             var typeLabel = rp[0] === 13 ? '主题' : (rp[0] === 10 ? '私信' : (rp[2] === '#SYSTEM#' ? '系统' : '回复'));
