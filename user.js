@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA版主举报管理工具
 // @namespace    https://greasyfork.org/zh-CN/scripts/577814-nga%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7
-// @version      1.3.6
+// @version      1.3.7
 // @description  NGA玩家社区网页版版主举报信息查看、筛选与管理工具
 // @author       UST
 // @match        *://bbs.nga.cn/*
@@ -1053,17 +1053,155 @@
         return btnWrap;
     }
 
+    // ---- 从 NGA 响应中截取 script_muti_get_var_store 的值 ----
+    // 旧实现用正则 /=\s*({[\s\S]*?});/ 非贪婪匹配，数据里一旦出现 "});" 就会被截断；
+    // 这里改为从第一个 "{" 开始做花括号配对扫描（带字符串感知），保证取到完整文本。
+    function extractStoreText(raw) {
+        var anchor = raw.indexOf('script_muti_get_var_store');
+        var start = anchor >= 0 ? raw.indexOf('{', anchor) : raw.indexOf('{');
+        if (start < 0) return null;
+        var depth = 0, quote = null, esc = false;
+        for (var i = start; i < raw.length; i++) {
+            var c = raw.charAt(i);
+            if (quote) {
+                if (esc) { esc = false; }
+                else if (c === '\\') { esc = true; }
+                else if (c === quote) { quote = null; }
+                continue;
+            }
+            if (c === '"' || c === "'") { quote = c; continue; }
+            if (c === '{') { depth++; }
+            else if (c === '}') {
+                depth--;
+                if (depth === 0) return raw.substring(start, i + 1);
+            }
+        }
+        return null;
+    }
+
+    // ---- 容错 JS 对象字面量解析器 ----
+    // NGA 的 noti 输出并不总是合法 JSON：某些类型通知的整数键不带引号
+    // 例：{ 9: 1792039131  ,0:2,1:64730847,...,5:"[插画搬运] 婚纱奥黛塔"}
+    // 这类文本 JSON.parse 必然报 "Unexpected token"，旧版会整份解析失败。
+    // 本解析器支持无引号键、单/双引号字符串、多余空格、尾随逗号，且不用 eval/new Function（不受页面 CSP 限制）。
+    function parseJsLiteral(src) {
+        var i = 0;
+        var n = src.length;
+
+        function skipWs() {
+            while (i < n && ' \t\r\n\f\v'.indexOf(src.charAt(i)) >= 0) { i++; }
+        }
+        function parseString() {
+            var quote = src.charAt(i);
+            i++;
+            var out = '';
+            while (i < n) {
+                var c = src.charAt(i++);
+                if (c === '\\') {
+                    var e = src.charAt(i++);
+                    if (e === 'n') { out += '\n'; }
+                    else if (e === 't') { out += '\t'; }
+                    else if (e === 'r') { out += '\r'; }
+                    else if (e === 'b') { out += '\b'; }
+                    else if (e === 'f') { out += '\f'; }
+                    else if (e === 'u') { out += String.fromCharCode(parseInt(src.substr(i, 4), 16)); i += 4; }
+                    else if (e === 'x') { out += String.fromCharCode(parseInt(src.substr(i, 2), 16)); i += 2; }
+                    else { out += e; }
+                } else if (c === quote) {
+                    return out;
+                } else {
+                    out += c;
+                }
+            }
+            throw new Error('字符串未闭合');
+        }
+        function parseKey() {
+            skipWs();
+            var c = src.charAt(i);
+            if (c === '"' || c === "'") { return parseString(); }
+            var start = i;
+            while (i < n && ' \t\r\n:'.indexOf(src.charAt(i)) < 0) { i++; }
+            return src.substring(start, i);
+        }
+        function parseValue() {
+            skipWs();
+            var c = src.charAt(i);
+            if (c === '{') { return parseObject(); }
+            if (c === '[') { return parseArray(); }
+            if (c === '"' || c === "'") { return parseString(); }
+            if (c === '') { throw new Error('数据意外结束'); }
+            var start = i;
+            while (i < n && ',]}:'.indexOf(src.charAt(i)) < 0) { i++; }
+            var tok = src.substring(start, i).replace(/^\s+|\s+$/g, '');
+            if (tok === '') {
+                if (src.charAt(i) === ',') { i++; return parseValue(); }
+                throw new Error('空值 @' + start);
+            }
+            if (tok === 'true') { return true; }
+            if (tok === 'false') { return false; }
+            if (tok === 'null' || tok === 'undefined') { return null; }
+            if (/^-?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(tok)) { return parseFloat(tok); }
+            return tok;
+        }
+        function parseObject() {
+            i++; // 跳过 {
+            var obj = {};
+            skipWs();
+            if (src.charAt(i) === '}') { i++; return obj; }
+            while (i < n) {
+                skipWs();
+                if (src.charAt(i) === '}') { i++; return obj; } // 容忍尾随逗号
+                var key = parseKey();
+                skipWs();
+                if (src.charAt(i) !== ':') { throw new Error('对象缺少冒号 @' + i); }
+                i++;
+                obj[key] = parseValue();
+                skipWs();
+                var ch = src.charAt(i);
+                if (ch === ',') { i++; continue; }
+                if (ch === '}') { i++; return obj; }
+                throw new Error('对象语法错误 @' + i + ' 字符:' + ch);
+            }
+            throw new Error('对象未闭合');
+        }
+        function parseArray() {
+            i++; // 跳过 [
+            var arr = [];
+            skipWs();
+            if (src.charAt(i) === ']') { i++; return arr; }
+            while (i < n) {
+                arr.push(parseValue());
+                skipWs();
+                var ch = src.charAt(i);
+                if (ch === ',') { i++; continue; }
+                if (ch === ']') { i++; return arr; }
+                throw new Error('数组语法错误 @' + i + ' 字符:' + ch);
+            }
+            throw new Error('数组未闭合');
+        }
+
+        return parseValue();
+    }
+
     function parseReportResponse(raw, reject) {
         var data;
         if (typeof raw === 'string') {
-            var match = raw.match(/window\.script_muti_get_var_store\s*=\s*({[\s\S]*?});/);
-            if (!match) {
+            var text = extractStoreText(raw);
+            if (!text) {
                 reject(new Error('未能从响应中匹配到数据JSON, 前500字符: ' + raw.substring(0, 500)));
                 return null;
             }
-            try { data = JSON.parse(match[1]); } catch (e) {
-                reject(new Error('JSON解析失败: ' + e.message));
-                return null;
+            try {
+                data = JSON.parse(text);
+            } catch (e1) {
+                // 非严格 JSON（无引号键等）→ 走容错解析
+                try {
+                    data = parseJsLiteral(text);
+                    log('JSON.parse 失败(' + e1.message + ')，已改用容错解析器（JS 对象字面量）');
+                } catch (e2) {
+                    reject(new Error('解析响应失败: ' + e2.message + ' (JSON: ' + e1.message + ')'));
+                    return null;
+                }
             }
         } else if (raw && typeof raw === 'object') {
             data = raw;
@@ -1074,6 +1212,14 @@
         return data;
     }
 
+
+    // 兜底扫描时用于识别“举报/通知记录”的特征（排除 type=2 等其它类型通知）
+    function isReportRecord(r) {
+        if (!r || typeof r !== 'object' || Array.isArray(r)) return false;
+        if (r[9] == null) return false;   // 时间戳
+        if (r[1] == null) return false;   // 举报人 UID
+        return r[0] === 13 || r[0] === 14 || r[0] === 10 || r[2] === '#SYSTEM#';
+    }
 
     function extractReports(data, reject) {
         // log('=== 解析后的完整数据 ===');
@@ -1096,17 +1242,56 @@
         for (var k = 0; k < notiKeys.length; k++) {
             var key = notiKeys[k];
             var section = notiData[key];
-            if (section && Array.isArray(section['1'])) {
-                reports = reports.concat(section['1']);
-                log('从 data["' + key + '"]["1"] 获取到 ' + section['1'].length + ' 条记录');
+            if (Array.isArray(section)) {
+                log('data["' + key + '"] 是数组，共 ' + section.length + ' 项');
+                if (key === '1') {
+                    reports = reports.concat(section);
+                    log('从 data["' + key + '"] 直接获取到 ' + section.length + ' 条记录');
+                }
+                continue;
             }
-            if (key === '1' && Array.isArray(section)) {
-                reports = reports.concat(section);
-                log('从 data["1"] 直接获取到 ' + section.length + ' 条记录');
+            if (!section || typeof section !== 'object') { continue; }
+
+            var subKeys = Object.keys(section);
+            log('data["' + key + '"] 子节点: ' + subKeys.join(', ') );
+            for (var s = 0; s < subKeys.length; s++) {
+                var sub = section[subKeys[s]];
+                if (!Array.isArray(sub)) { continue; }
+                log('  data["' + key + '"]["' + subKeys[s] + '"] = ' + sub.length + ' 条');
+                // 举报记录固定放在子键 "1" 下（"0" 是新版其它类型通知）
+                if (subKeys[s] === '1') {
+                    reports = reports.concat(sub);
+                    log('从 data["' + key + '"]["1"] 获取到 ' + sub.length + ' 条记录');
+                }
             }
         }
-        if (Array.isArray(notiData['1'])) {
-            reports = reports.concat(notiData['1']);
+        // 注：顶层 data["1"] 为数组的情况已在上面的循环里处理，此处不再重复合并（旧版会因此翻倍）
+
+        // 兜底：NGA 若调整了分组结构，按记录特征在整棵 data 树里扫描
+        if (reports.length === 0) {
+            var collected = [];
+            (function walk(node, depth) {
+                if (!node || typeof node !== 'object' || depth > 4) { return; }
+                if (Array.isArray(node)) {
+                    for (var i = 0; i < node.length; i++) { walk(node[i], depth + 1); }
+                    return;
+                }
+                var ks = Object.keys(node);
+                for (var j = 0; j < ks.length; j++) {
+                    var v = node[ks[j]];
+                    if (Array.isArray(v)) {
+                        for (var m = 0; m < v.length; m++) {
+                            if (isReportRecord(v[m])) { collected.push(v[m]); }
+                        }
+                    } else {
+                        walk(v, depth + 1);
+                    }
+                }
+            })(notiData, 0);
+            if (collected.length > 0) {
+                log('⚠ 已知结构未取到记录，兜底扫描获得 ' + collected.length + ' 条');
+                reports = collected;
+            }
         }
 
         log('=== 共解析到 ' + reports.length + ' 条举报记录 ===');
@@ -1118,41 +1303,138 @@
 
 
 
+    // ========== 路径B：直接 POST 官方接口 ==========
+    // 与“浏览器手动 POST /nuke.php?__lib=noti&raw=3”完全一致，作为 __NUKE 不可用时的兜底。
+    function fetchViaXhr() {
+        var urls = [
+            '/nuke.php?__lib=noti&__act=get_all&raw=3',
+            '/nuke.php?__lib=noti&raw=3'
+        ];
+        return new Promise(function(resolve, reject) {
+            var idx = 0;
+            var lastErr = null;
+
+            function attempt() {
+                if (idx >= urls.length) {
+                    reject(lastErr || new Error('直连接口未返回有效数据'));
+                    return;
+                }
+                var url = urls[idx++];
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', url, true);
+                xhr.timeout = 15000;
+                xhr.withCredentials = true;
+                try { xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded'); } catch (e) {}
+                // NGA noti 接口为 GBK 输出，显式声明避免中文乱码
+                try { xhr.overrideMimeType('text/plain; charset=GBK'); } catch (e) {}
+
+                xhr.onload = function() {
+                    if (xhr.status !== 200) {
+                        lastErr = new Error('HTTP ' + xhr.status + ' @ ' + url);
+                        logError('路径B ' + lastErr.message);
+                        attempt();
+                        return;
+                    }
+                    var data = parseReportResponse(xhr.responseText, function(err) {
+                        lastErr = err;
+                        logError('路径B 解析失败: ' + err.message);
+                    });
+                    if (data) {
+                        var reports = extractReports(data, function(err) {
+                            lastErr = err;
+                            logError('路径B 提取失败: ' + err.message);
+                        });
+                        if (reports && reports.length > 0) {
+                            console.warn(LOG_PREFIX, '★★★ [路径B] ' + url + ' 获取到 ' + reports.length + ' 条记录 ★★★');
+                            resolve(reports);
+                            return;
+                        }
+                        lastErr = new Error('接口返回 0 条记录 @ ' + url);
+                    }
+                    attempt();
+                };
+                xhr.onerror = function() { lastErr = new Error('网络错误 @ ' + url); attempt(); };
+                xhr.ontimeout = function() { lastErr = new Error('请求超时 @ ' + url); attempt(); };
+                xhr.send('');
+            }
+            attempt();
+        });
+    }
+
     function fetchReportData() {
         return new Promise(function(resolve, reject) {
-            var started = false;
-            var maxAttempts = 20;
-            var attempt = 0;
+            var settled = false;
+            var attempts = 0;
+            var maxAttempts = 6;   // 最多等 3 秒 __NUKE 就绪，避免旧版“检测不到就永久挂起”
+            var REPORT_URL = '/nuke.php?__lib=noti&__act=get_all&raw=3';
 
-            function tryNuke() {
-                attempt++;
+            function done(reports, from) {
+                if (settled) return;
+                settled = true;
+                console.warn(LOG_PREFIX, '★★★ [' + from + '-成功] 获取到 ' + reports.length + ' 条记录 ★★★');
+                resolve(reports);
+            }
+            function viaXhr(why, emptyIsOk) {
+                if (settled) return;
+                console.warn(LOG_PREFIX, '★★★ [路径B] 改用直接 POST 官方接口（' + why + '） ★★★');
+                fetchViaXhr().then(function(reports) {
+                    done(reports, '路径B');
+                }, function(err) {
+                    if (settled) return;
+                    settled = true;
+                    if (emptyIsOk) { resolve([]); return; }
+                    reject(new Error('获取举报数据失败: ' + err.message + '（__NUKE 与直连接口均不可用，请确认已登录 NGA）'));
+                });
+            }
+
+            (function tryNuke() {
+                if (settled) return;
                 if (typeof __NUKE !== 'undefined' && typeof __NUKE.doRequest2 === 'function') {
-                    if (started) return;
-                    started = true;
-                    console.warn(LOG_PREFIX, '★★★ [路径A] __NUKE.doRequest2 可用(第' + attempt + '次检测) ★★★');
+                    console.warn(LOG_PREFIX, '★★★ [路径A] __NUKE.doRequest2 可用(第' + (attempts + 1) + '次检测) ★★★');
 
-                    var timeout = setTimeout(function() {
-                        reject(new Error('__NUKE请求超时(15秒)'));
+                    var timer = setTimeout(function() {
+                        viaXhr('__NUKE 回调超时 15 秒');
                     }, 15000);
 
-                    __NUKE.doRequest2(
-                        'f', function(d) {
-                            clearTimeout(timeout);
-                            var data = parseReportResponse(d, reject);
-                            if (!data) return;
-                            var reports = extractReports(data, reject);
-                            if (reports) {
-                                console.warn(LOG_PREFIX, '★★★ [路径A-成功] __NUKE.doRequest2 获取到 ' + reports.length + ' 条记录 ★★★');
-                                resolve(reports);
-                            }
-                        },
-                        'u', '/nuke.php?__lib=noti&__act=get_all&raw=3'
-                    );
-                } else if (attempt < maxAttempts) {
-                    setTimeout(tryNuke, 500);
+                    try {
+                        __NUKE.doRequest2(
+                            'f',
+                            function(d) {
+                                clearTimeout(timer);
+                                if (settled) return;
+                                var parseErr = null;
+                                var data = parseReportResponse(d, function(err) { parseErr = err; });
+                                if (!data) {
+                                    viaXhr(parseErr ? parseErr.message : '响应解析失败');
+                                    return;
+                                }
+                                var reports = extractReports(data, function(err) { parseErr = err; });
+                                if (!reports) {
+                                    viaXhr(parseErr ? parseErr.message : '数据提取失败');
+                                    return;
+                                }
+                                if (reports.length === 0) {
+                                    // 路径A 拿到空列表时再用直连接口复核一次，避免接口差异导致误判“无举报”
+                                    viaXhr('__NUKE 返回 0 条记录，直连复核', true);
+                                    return;
+                                }
+                                done(reports, '路径A');
+                            },
+                            'u', REPORT_URL
+                        );
+                    } catch (e) {
+                        clearTimeout(timer);
+                        viaXhr('__NUKE.doRequest2 抛错: ' + e.message);
+                    }
+                    return;
                 }
-            }
-            tryNuke();
+                attempts++;
+                if (attempts < maxAttempts) {
+                    setTimeout(tryNuke, 500);
+                } else {
+                    viaXhr('__NUKE 不存在');
+                }
+            })();
         });
     }
 
