@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA版主举报管理工具
 // @namespace    https://greasyfork.org/zh-CN/scripts/577814-nga%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7
-// @version      1.3.8
+// @version      1.3.9
 // @description  NGA玩家社区网页版版主举报信息查看、筛选与管理工具
 // @author       UST
 // @match        *://bbs.nga.cn/*
@@ -22,7 +22,7 @@
     var LOG_PREFIX = '[NGA举报工具]';
     // 版本号：优先取油猴元数据，便于确认页面里跑的是哪一版
     var SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version)
-        ? GM_info.script.version : '1.3.8';
+        ? GM_info.script.version : '1.3.9';
     function log(msg, data) {
         console.log(LOG_PREFIX, msg, data || '');
     }
@@ -1024,6 +1024,7 @@
                     '<div id="nga-search-input-wrap">' +
                         '<input type="text" id="nga-search-input" placeholder="输入关键词搜索举报内容、标题、理由...">' +
                         '<button class="settings-btn" id="nga-search-do">搜索</button>' +
+                        '<button class="settings-btn" id="nga-search-complete" title="把当前搜索结果中未处理的举报全部标记为已处理">一键完成</button>' +
                     '</div>' +
                     '<div id="nga-search-result"></div>' +
                 '</div>' +
@@ -2618,6 +2619,68 @@
         if (overlay) overlay.classList.remove('show');
     }
 
+    // 关键词匹配本地缓存的举报（搜索窗口与「一键完成」共用同一套规则）
+    function filterReportsByQuery(query) {
+        var q = String(query || '').toLowerCase();
+        var reports = getAllReports();
+        var results = [];
+        for (var i = 0; i < reports.length; i++) {
+            var r = reports[i];
+            var title = String(r[5] || '').toLowerCase();
+            var reason = String(r[11] || '').toLowerCase();
+            if (title.indexOf(q) >= 0 || reason.indexOf(q) >= 0) {
+                results.push(r);
+            }
+        }
+        return results;
+    }
+
+    // 搜索窗口「一键完成」：只处理当前搜索结果中未处理的举报
+    function searchBatchComplete() {
+        var query = document.getElementById('nga-search-input').value.trim().toLowerCase();
+        var resultDiv = document.getElementById('nga-search-result');
+        if (!query) {
+            resultDiv.innerHTML = '<div class="nga-search-empty">请先输入关键词并搜索，再执行一键完成</div>';
+            return;
+        }
+        var results = filterReportsByQuery(query);
+        if (results.length === 0) {
+            resultDiv.innerHTML = '<div class="nga-search-empty">未找到匹配结果</div>';
+            return;
+        }
+        var map = getStatusMap();
+        var count = 0;
+        for (var i = 0; i < results.length; i++) {
+            var key = buildReportKey(results[i]);
+            var status = map.hasOwnProperty(key) ? map[key] : STATUS_UNPROCESSED;
+            if (status === STATUS_UNPROCESSED) {
+                map[key] = STATUS_PROCESSED;
+                count++;
+            }
+        }
+        saveStatusMap(map);
+        refreshTable();
+        doSearch(); // 重绘结果列表，状态列立即反映处理结果
+        // 搜索弹窗层级(z-index:4)高于主面板(z-index:3)，页面内 toast 会被遮住，故在结果区顶部直接回显
+        var tip = document.createElement('div');
+        tip.style.cssText = 'font-size:12px;padding:6px 9px;margin-bottom:8px;border-radius:2px;' +
+            (count > 0
+                ? 'color:#1d7a43;background:#e8f6ec;border:1px solid #27ae60;'
+                : 'color:#8b6914;background:#fdf6e3;border:1px solid #d4a017;');
+        tip.textContent = count > 0
+            ? '✔ 已将当前搜索结果中的 ' + count + ' 条未处理举报标记为已处理（共匹配 ' + results.length + ' 条）'
+            : '当前搜索结果共 ' + results.length + ' 条，没有未处理记录';
+        if (resultDiv.firstChild) {
+            resultDiv.insertBefore(tip, resultDiv.firstChild);
+        } else {
+            resultDiv.appendChild(tip);
+        }
+        log('搜索窗口一键完成: 匹配 ' + results.length + ' 条，本次处理 ' + count + ' 条');
+        showToast(count > 0
+            ? '✔ 一键完成：已将当前搜索结果中 ' + count + ' 条未处理举报标记为已处理（共匹配 ' + results.length + ' 条）'
+            : '当前搜索结果共 ' + results.length + ' 条，没有未处理记录', count > 0 ? 'success' : 'warn');
+    }
+
     function doSearch() {
         var query = document.getElementById('nga-search-input').value.trim().toLowerCase();
         var resultDiv = document.getElementById('nga-search-result');
@@ -2625,22 +2688,21 @@
             resultDiv.innerHTML = '<div class="nga-search-empty">请输入搜索关键词</div>';
             return;
         }
-        var reports = getAllReports();
-        var results = [];
-        for (var i = 0; i < reports.length; i++) {
-            var r = reports[i];
-            var title = String(r[5] || '').toLowerCase();
-            var reason = String(r[11] || '').toLowerCase();
-            if (title.indexOf(query) >= 0 || reason.indexOf(query) >= 0) {
-                results.push(r);
-            }
+        var results = filterReportsByQuery(query);
+        var map = getStatusMap();
+        var processedCount = 0;
+        for (var pi = 0; pi < results.length; pi++) {
+            var pk = buildReportKey(results[pi]);
+            if ((map.hasOwnProperty(pk) ? map[pk] : STATUS_UNPROCESSED) !== STATUS_UNPROCESSED) processedCount++;
         }
         if (results.length === 0) {
             resultDiv.innerHTML = '<div class="nga-search-empty">未找到匹配结果</div>';
             return;
         }
-        var html = '<div style="font-size:12px;color:#6b4e2e;margin-bottom:8px;">共搜到 ' + results.length + ' 个包含关键词"' + escapeHtml(query) + '"的举报</div>';
-        html += '<table><thead><tr><th>时间</th><th>类型</th><th>标题/理由</th><th>版块</th></tr></thead><tbody>';
+        var html = '<div style="font-size:12px;color:#6b4e2e;margin-bottom:8px;">共搜到 ' + results.length +
+            ' 个包含关键词"' + escapeHtml(query) + '"的举报（已处理 ' + processedCount + ' 条，未处理 ' +
+            (results.length - processedCount) + ' 条）</div>';
+        html += '<table><thead><tr><th>时间</th><th>类型</th><th>标题/理由</th><th>版块</th><th>状态</th></tr></thead><tbody>';
         for (var j = 0; j < results.length; j++) {
             var rp = results[j];
             var typeLabel = rp[0] === 13 ? '主题' : (rp[0] === 10 ? '私信' : (rp[2] === '#SYSTEM#' ? '系统' : '回复'));
@@ -2661,11 +2723,16 @@
                 }
                 titleHtml = '<a href="' + linkUrl + '" target="_blank">' + escapeHtml(titleText) + '</a>';
             }
+            var rowKey = buildReportKey(rp);
+            var rowStatus = map.hasOwnProperty(rowKey) ? map[rowKey] : STATUS_UNPROCESSED;
+            var statusStyle = rowStatus === STATUS_PROCESSED ? 'color:#27ae60' :
+                (rowStatus === STATUS_MARKED ? 'color:#8b6914' : 'color:#c0392b');
             html += '<tr>' +
                 '<td style="white-space:nowrap">' + timeStr + '</td>' +
                 '<td>' + typeLabel + '</td>' +
                 '<td>' + titleHtml + '<br><span style="color:#888">' + escapeHtml(reasonText) + '</span></td>' +
                 '<td>' + escapeHtml(forumText) + '</td>' +
+                '<td style="white-space:nowrap;' + statusStyle + '">' + (STATUS_LABELS[rowStatus] || '') + '</td>' +
             '</tr>';
         }
         html += '</tbody></table>';
@@ -2746,6 +2813,10 @@
             if (e.target === this) hideSearch();
         });
         document.getElementById('nga-search-do').addEventListener('click', doSearch);
+        document.getElementById('nga-search-complete').addEventListener('click', function() {
+            log('搜索窗口一键完成按钮被点击');
+            searchBatchComplete();
+        });
         document.getElementById('nga-search-input').addEventListener('keydown', function(e) {
             if (e.key === 'Enter') doSearch();
         });
