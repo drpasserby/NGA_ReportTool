@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA版主举报管理工具
 // @namespace    https://greasyfork.org/zh-CN/scripts/577814-nga%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7
-// @version      1.3.9
+// @version      1.4.1
 // @description  NGA玩家社区网页版版主举报信息查看、筛选与管理工具
 // @author       UST
 // @match        *://bbs.nga.cn/*
@@ -22,7 +22,7 @@
     var LOG_PREFIX = '[NGA举报工具]';
     // 版本号：优先取油猴元数据，便于确认页面里跑的是哪一版
     var SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version)
-        ? GM_info.script.version : '1.3.9';
+        ? GM_info.script.version : '1.4.1';
     function log(msg, data) {
         console.log(LOG_PREFIX, msg, data || '');
     }
@@ -63,6 +63,14 @@
         '#nga-report-stats{background:#faf3e6;border:1px solid #d4c5a9;padding:8px 12px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}',
         '#nga-report-stats span{color:#6b4e2e}',
         '#nga-report-stats strong{color:#c0392b}',
+        // 时间两行：上行最新举报时间、下行上一次处理时间（保持原有字号/配色风格）
+        '#nga-report-stats #nga-report-last-update{display:flex;flex-direction:column;align-items:flex-end;line-height:1.45;max-width:100%}',
+        // 提高特异性，避免被各主题的 `#nga-report-stats span` 规则覆盖
+        '#nga-report-panel-overlay #nga-report-stats #nga-report-last-update .stats-time-line{color:#8b6914;white-space:nowrap}',
+        '#nga-report-panel-overlay #nga-report-stats #nga-report-last-update .stats-time-line-complete{color:#2b6cb0;white-space:nowrap}',
+        // 暗绿主题背景较深，蓝色提亮保证可读
+        '#nga-report-panel-overlay.theme-darkgreen #nga-report-stats #nga-report-last-update .stats-time-line{color:#a0b898}',
+        '#nga-report-panel-overlay.theme-darkgreen #nga-report-stats #nga-report-last-update .stats-time-line-complete{color:#5aa9e6}',
 
         // ---- 工具栏 ----
         '#nga-report-toolbar{display:flex;align-items:center;gap:8px;padding:6px 0;margin-bottom:10px}',
@@ -232,6 +240,7 @@
             // 统计栏纵向堆叠
             '#nga-report-stats{flex-direction:column;align-items:flex-start;gap:6px}',
             '#nga-report-stats>div{width:100%}',
+            '#nga-report-stats #nga-report-last-update{align-items:flex-start;width:100%}',
             // 工具栏
             '#nga-report-toolbar{gap:6px;flex-wrap:wrap}',
             '.toolbar-btn{padding:8px 18px;font-size:13px}',
@@ -635,6 +644,7 @@
     var SYSTEM_FILTER_KEY = 'nga_system_filter';
     var THEME_KEY = 'nga_theme';
     var COLUMN_VISIBILITY_KEY = 'nga_column_visibility';
+    var LAST_COMPLETE_KEY = 'nga_report_last_complete';
     var COLUMNS = [
         { key: 'mark', label: '标记', cls: 'col-mark' },
         { key: 'state', label: '状态', cls: 'col-state' },
@@ -655,7 +665,7 @@
     var PAGE_SIZE = 25;
     var currentPage = 0;
 
-    var DATA_KEYS = [CACHE_KEY, STATUS_KEY, FILTER_KEY, STATUS_FILTER_KEY, STATE_CACHE_KEY, REPORTED_USER_CACHE_KEY, KEYWORD_KEY, SYSTEM_FILTER_KEY, COLUMN_VISIBILITY_KEY, THEME_KEY];
+    var DATA_KEYS = [CACHE_KEY, STATUS_KEY, FILTER_KEY, STATUS_FILTER_KEY, STATE_CACHE_KEY, REPORTED_USER_CACHE_KEY, KEYWORD_KEY, SYSTEM_FILTER_KEY, COLUMN_VISIBILITY_KEY, THEME_KEY, LAST_COMPLETE_KEY];
 
     function buildReportKey(r) {
         return r[6] + '_' + r[7] + '_' + r[1] + '_' + r[9];
@@ -670,6 +680,19 @@
 
     function saveStatusMap(map) {
         try { localStorage.setItem(STATUS_KEY, JSON.stringify(map)); } catch (e) {}
+    }
+
+    // ========== 上一次「一键完成」时间 ==========
+    function getLastCompleteTime() {
+        try {
+            var raw = localStorage.getItem(LAST_COMPLETE_KEY);
+            var ts = raw ? parseInt(raw, 10) : 0;
+            return isNaN(ts) ? 0 : ts;
+        } catch (e) { return 0; }
+    }
+
+    function setLastCompleteTime(ts) {
+        try { localStorage.setItem(LAST_COMPLETE_KEY, String(ts)); } catch (e) {}
     }
 
     function getReportStatus(r) {
@@ -925,7 +948,7 @@
                                 '<button class="status-filter-btn" data-status-filter="1">已处理</button>' +
                                 '<button class="status-filter-btn" data-status-filter="2">已标记</button>' +
                             '</div>' +
-                            '<span style="font-size:12px;color:#8b6914;" id="nga-report-last-update"></span>' +
+                            '<span id="nga-report-last-update" style="font-size:12px;color:#8b6914;display:flex;flex-direction:column;align-items:flex-end;line-height:1.45;white-space:nowrap;"></span>' +
                         '</div>' +
                         '<div id="nga-report-toolbar">' +
                             '<button id="nga-report-refresh-btn" class="toolbar-btn">刷新数据</button>' +
@@ -2157,30 +2180,6 @@
         return toast;
     }
 
-    // 汇总当前生效的筛选条件，用于解释“为什么列表只显示 N 条”
-    function getFilterSummary() {
-        var parts = [];
-        var config = getFilterConfig();
-        var selected = config.selectedForums || [];
-        if (selected.length > 0) {
-            var names = [];
-            for (var i = 0; i < selected.length; i++) {
-                var f = selected[i];
-                var isExact = f.length > FILTER_EXACT_SUFFIX.length &&
-                    f.substring(f.length - FILTER_EXACT_SUFFIX.length) === FILTER_EXACT_SUFFIX;
-                names.push(isExact ? f.substring(0, f.length - FILTER_EXACT_SUFFIX.length) + '(仅本版)' : f);
-            }
-            parts.push('版面筛选 ' + names.length + ' 项：' +
-                (names.length <= 3 ? names.join('、') : names.slice(0, 3).join('、') + ' 等'));
-        }
-        var statusFilter = getStatusFilter();
-        if (statusFilter !== -1) {
-            parts.push('状态：' + (STATUS_LABELS[statusFilter] || statusFilter));
-        }
-        if (isSystemFilterEnabled()) { parts.push('已屏蔽系统消息'); }
-        return parts.length > 0 ? parts.join('；') : '无筛选';
-    }
-
     // 一键清除所有筛选（状态 + 版面 + 系统消息屏蔽）
     function clearAllFilters() {
         setStatusFilter(-1);
@@ -2192,15 +2191,51 @@
 
     function updateStats() {
         var lastUpdateEl = document.getElementById('nga-report-last-update');
-        if (lastUpdateEl) {
-            var reports = getAllReports();
-            if (reports.length > 0) {
-                lastUpdateEl.textContent = '最新: ' + formatTimestamp(reports[0][9]);
-            } else {
-                lastUpdateEl.textContent = '';
-            }
-        }
+        if (!lastUpdateEl) return;
+        var reports = getAllReports();
+        var lastComplete = getLastCompleteTime();
+        var line1 = '最新举报时间：' + (reports.length > 0 ? formatTimestamp(reports[0][9]) : '-');
+        var line2 = '上一次处理时间：' + (lastComplete > 0 ? formatTimestamp(lastComplete) : '-');
+        // 两行竖排；若横向空间不足（窄屏/手机）则整体缩小字号，保证一行塞得下
+        lastUpdateEl.innerHTML =
+            '<span class="stats-time-line">' + line1 + '</span>' +
+            '<span class="stats-time-line stats-time-line-complete">' + line2 + '</span>';
+        fitStatsTimeWidth(lastUpdateEl, line1, line2);
     }
+
+    // 按可用空间自适应字号：两行都保持不换行，塞不下就整体缩小（12px → 最小 9px）
+    function fitStatsTimeWidth(el, line1, line2) {
+        var host = el.parentNode;
+        el.style.fontSize = '12px';
+        if (!host) return;
+        var cs = window.getComputedStyle(host);
+        var avail = host.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
+        if (!(avail > 0)) return;
+
+        // 用一个不可见的探针测最长一行在 12px 下的自然宽度（中文字宽随字号线性缩放）
+        var probe = document.createElement('span');
+        probe.style.cssText = 'position:absolute;left:-9999px;top:0;visibility:hidden;white-space:nowrap;' +
+            'font-size:12px;font-family:' + cs.fontFamily;
+        probe.textContent = line1.length >= line2.length ? line1 : line2;
+        document.body.appendChild(probe);
+        var natural = probe.getBoundingClientRect().width;
+        document.body.removeChild(probe);
+        if (!(natural > 0) || natural <= avail) return;
+
+        var size = Math.floor(12 * avail / natural);
+        if (size < 9) size = 9;
+        el.style.fontSize = size + 'px';
+    }
+
+    // 窗口尺寸变化时重算字号（手机横竖屏切换等）
+    var statsResizeTimer = null;
+    window.addEventListener('resize', function() {
+        if (statsResizeTimer) clearTimeout(statsResizeTimer);
+        statsResizeTimer = setTimeout(function() {
+            var overlay = document.getElementById('nga-report-panel-overlay');
+            if (overlay && overlay.classList.contains('show')) updateStats();
+        }, 150);
+    });
 
     function getStorageSize() {
         var total = 0;
@@ -2263,7 +2298,6 @@
         clearToasts();
         fetchReportData().then(function(newReports) {
             log('fetch 成功，获得 ' + newReports.length + ' 条新记录');
-            var fetchedCount = newReports.length;
             if (isSystemFilterEnabled()) {
                 newReports = newReports.filter(function(r) { return r[2] !== '#SYSTEM#'; });
                 log('屏蔽系统消息后剩余 ' + newReports.length + ' 条');
@@ -2272,25 +2306,16 @@
             var merged = mergeReports(existing, newReports);
             log('合并后共 ' + merged.length + ' 条记录');
             saveCache(merged);
-            // 缓存写入失败（如超出 localStorage 配额）时界面仍会显示旧数据，必须显式提示
+            // 缓存写入失败（如超出 localStorage 配额）属于异常情况，需要提示
             var savedOk = getCachedReports().length === merged.length;
             localStorage.removeItem(STATE_CACHE_KEY);
             localStorage.removeItem(REPORTED_USER_CACHE_KEY);
             refreshTable();
             refreshFilterUI();
-
-            var visible = getDisplayReports().length;
-            var msg = '✔ 获取成功：本次抓取 ' + fetchedCount + ' 条，本地共 ' + merged.length + ' 条';
+            // 成功路径（无论是否处于筛选状态）一律静默，不弹提示；仅失败/异常才提示
             if (!savedOk) {
-                showToast(msg + '；⚠ 但本地缓存写入失败（可能超出存储配额），请到「设置 → 清除最旧的100条」后重试', 'error');
-                return;
-            }
-            if (visible !== merged.length) {
-                msg += '；受当前筛选（' + getFilterSummary() + '）影响，列表只显示 ' + visible +
-                    ' 条，其余 ' + (merged.length - visible) + ' 条被隐藏。点顶部“共 X 条”旁的「显示全部」可查看全部';
-                showToast(msg, 'warn');
-            } else {
-                showToast(msg + '，列表已显示全部', 'success');
+                showToast('⚠ 数据已获取但本地缓存写入失败（可能超出存储配额），' +
+                    '刷新后可能丢失新记录。请到「设置 → 清除最旧的100条」后重试', 'error');
             }
         }).catch(function(e) {
             logError('获取数据失败: ' + e.message, e);
@@ -2347,6 +2372,7 @@
             }
         }
         saveStatusMap(map);
+        if (count > 0) { setLastCompleteTime(Math.floor(Date.now() / 1000)); }
         refreshTable();
         log('一键完成: 已将 ' + count + ' 条未处理举报标记为已处理');
     }
@@ -2659,6 +2685,7 @@
             }
         }
         saveStatusMap(map);
+        if (count > 0) { setLastCompleteTime(Math.floor(Date.now() / 1000)); }
         refreshTable();
         doSearch(); // 重绘结果列表，状态列立即反映处理结果
         // 搜索弹窗层级(z-index:4)高于主面板(z-index:3)，页面内 toast 会被遮住，故在结果区顶部直接回显
