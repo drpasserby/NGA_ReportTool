@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA版主举报管理工具
 // @namespace    https://greasyfork.org/zh-CN/scripts/577814-nga%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7
-// @version      1.4.1
+// @version      1.4.2
 // @description  NGA玩家社区网页版版主举报信息查看、筛选与管理工具
 // @author       UST
 // @match        *://bbs.nga.cn/*
@@ -22,7 +22,7 @@
     var LOG_PREFIX = '[NGA举报工具]';
     // 版本号：优先取油猴元数据，便于确认页面里跑的是哪一版
     var SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version)
-        ? GM_info.script.version : '1.4.1';
+        ? GM_info.script.version : '1.4.2';
     function log(msg, data) {
         console.log(LOG_PREFIX, msg, data || '');
     }
@@ -106,6 +106,8 @@
         '.type-topic{background:#d4e6f1;color:#1a5276}',
         '.type-reply{background:#d5f5e3;color:#1e8449}',
         '.state-tag{display:inline-block;padding:1px 5px;margin:1px;border-radius:2px;font-size:11px;font-weight:bold;background:#d4e6f1;color:#1a5276}',
+        // 「处罚」标签：浅红背景（参考色 #F9CAB5），样式与其它状态标签保持一致
+        '.state-tag.state-tag-penalty{background:#F9CAB5;color:#7b241c;cursor:help}',
         '.status-tag{display:inline-block;padding:1px 6px;border-radius:2px;font-size:11px;font-weight:bold}',
         '.status-unprocessed{background:#d5d5d5;color:#555}',
         '.status-processed{background:#d4e6f1;color:#1a5276}',
@@ -310,6 +312,7 @@
         '#nga-report-panel-overlay.theme-pastel .type-topic{background:#e8f4fd;color:#2471a3}',
         '#nga-report-panel-overlay.theme-pastel .type-reply{background:#e8f8e8;color:#1e8449}',
         '#nga-report-panel-overlay.theme-pastel .state-tag{background:#e8f4fd;color:#2471a3}',
+        '#nga-report-panel-overlay.theme-pastel .state-tag.state-tag-penalty{background:#F9CAB5;color:#7b241c}',
         '#nga-report-panel-overlay.theme-pastel .status-unprocessed{background:#e0e0e0;color:#666}',
         '#nga-report-panel-overlay.theme-pastel .status-processed{background:#e8f4fd;color:#2471a3}',
         '#nga-report-panel-overlay.theme-pastel .status-marked{background:#fff0f3;color:#c0392b}',
@@ -398,6 +401,7 @@
         '#nga-report-panel-overlay.theme-desert .type-topic{background:#d4e6f1;color:#1a5276}',
         '#nga-report-panel-overlay.theme-desert .type-reply{background:#d5f5e3;color:#1e8449}',
         '#nga-report-panel-overlay.theme-desert .state-tag{background:#d4e6f1;color:#1a5276}',
+        '#nga-report-panel-overlay.theme-desert .state-tag.state-tag-penalty{background:#F9CAB5;color:#7b241c}',
         '#nga-report-panel-overlay.theme-desert .status-unprocessed{background:#e0dcc0;color:#665}',
         '#nga-report-panel-overlay.theme-desert .status-processed{background:#d4e6f1;color:#1a5276}',
         '#nga-report-panel-overlay.theme-desert .status-marked{background:#f9e79f;color:#7d6608}',
@@ -486,6 +490,7 @@
         '#nga-report-panel-overlay.theme-camo .type-topic{background:#d4e6f1;color:#1a5276}',
         '#nga-report-panel-overlay.theme-camo .type-reply{background:#d5f5e3;color:#1e8449}',
         '#nga-report-panel-overlay.theme-camo .state-tag{background:#d4e6f1;color:#1a5276}',
+        '#nga-report-panel-overlay.theme-camo .state-tag.state-tag-penalty{background:#F9CAB5;color:#7b241c}',
         '#nga-report-panel-overlay.theme-camo .status-unprocessed{background:#ddd;color:#666}',
         '#nga-report-panel-overlay.theme-camo .status-processed{background:#d4e6f1;color:#1a5276}',
         '#nga-report-panel-overlay.theme-camo .status-marked{background:#f9e79f;color:#7d6608}',
@@ -574,6 +579,7 @@
         '#nga-report-panel-overlay.theme-darkgreen .type-topic{background:#1e3d2e;color:#8fbf8f}',
         '#nga-report-panel-overlay.theme-darkgreen .type-reply{background:#1e3d2e;color:#8fbf8f}',
         '#nga-report-panel-overlay.theme-darkgreen .state-tag{background:#1e3d2e;color:#8fbf8f}',
+        '#nga-report-panel-overlay.theme-darkgreen .state-tag.state-tag-penalty{background:#F9CAB5;color:#7b241c}',
         '#nga-report-panel-overlay.theme-darkgreen .status-unprocessed{background:#2a2a2a;color:#999}',
         '#nga-report-panel-overlay.theme-darkgreen .status-processed{background:#1e3d2e;color:#8fbf8f}',
         '#nga-report-panel-overlay.theme-darkgreen .status-marked{background:#3d3520;color:#d4ac0d}',
@@ -824,6 +830,110 @@
         try { localStorage.setItem(STATE_CACHE_KEY, JSON.stringify(cache)); } catch (e) {}
     }
 
+    // 从 __output=11 的响应里取出 alterinfo。
+    // 优先取目标对象的字段；找不到时在 __T / __R 里兜底查找，兼容字段位置变化。
+    function pickAlterInfo(data, reportType) {
+        if (!data || typeof data !== 'object') return '';
+        var candidates = [];
+        if (reportType === 13) {
+            if (data.__T) candidates.push(data.__T);
+            if (data.__R && data.__R.length > 0) candidates.push(data.__R[0]);
+        } else {
+            if (data.__R && data.__R.length > 0) candidates.push(data.__R[0]);
+            if (data.__T) candidates.push(data.__T);
+        }
+        for (var i = 0; i < candidates.length; i++) {
+            var obj = candidates[i];
+            if (obj && typeof obj === 'object' && obj.alterinfo != null) {
+                var v = String(obj.alterinfo);
+                if (v.replace(/\s/g, '') !== '') return v;
+            }
+        }
+        // 兜底：__R 中任一条带处罚信息
+        if (data.__R && data.__R.length > 0) {
+            for (var j = 0; j < data.__R.length; j++) {
+                var r = data.__R[j];
+                if (r && r.alterinfo != null) {
+                    var rv = String(r.alterinfo);
+                    if (rv.replace(/\s/g, '') !== '') return rv;
+                }
+            }
+        }
+        return '';
+    }
+
+    // ---- 处罚信息（alterinfo）解析 ----
+    // NGA 的 __output=11 响应里，被处罚过的主题/回复会带 alterinfo：
+    //   无处罚: ""                              → 不显示处罚标签
+    //   一次:   "\t[L4 0 0 150 0 引战/转进/AOE]"
+    //   多次:   "\t[L6 0 0 300 20 广告]\t[L6 0 0 300 20 广告]"
+    // 形如 [L{等级} {?} {?} {扣分} {禁言天数} {理由}]，以 \t 分隔，条目数不固定。
+    function parseAlterInfo(raw) {
+        var text = (raw == null) ? '' : String(raw);
+        var items = [];
+        // 用带 g 标志的正则逐个提取；lastIndex 单调前移，天然避免死循环
+        var re = /\[([^\]]*)\]/g;
+        var m;
+        var guard = 0;
+        while ((m = re.exec(text)) !== null) {
+            if (++guard > 200) break;           // 异常输入保护
+            if (m[0] === '') { re.lastIndex++; continue; }  // 零长度匹配保护
+            var body = m[1].replace(/^\s+|\s+$/g, '');
+            if (!body) continue;
+            // 理由可能含空格，前 5 段是数字字段，之后整体为理由
+            var parts = body.split(/\s+/);
+            var level = '';
+            var lvMatch = /^L(\d+)$/i.exec(parts[0] || '');
+            if (lvMatch) level = lvMatch[1];
+            var score = '', banDays = '', reason = '';
+            if (parts.length >= 6) {
+                score = parts[3] || '';
+                banDays = parts[4] || '';
+                reason = parts.slice(5).join(' ');
+            } else {
+                reason = parts.slice(1).join(' ');
+            }
+            items.push({
+                level: level,
+                score: score,
+                banDays: banDays,
+                reason: reason,
+                raw: body
+            });
+        }
+        return items;
+    }
+
+    // 处罚标签的悬浮说明文字
+    function describeAlterItems(items) {
+        if (!items || items.length === 0) return '';
+        var lines = ['该帖已被处罚（' + items.length + ' 次）'];
+        for (var i = 0; i < items.length; i++) {
+            var it = items[i];
+            var bits = [];
+            if (it.level) bits.push('L' + it.level);
+            if (it.reason) bits.push(it.reason);
+            if (it.score) bits.push('扣分 ' + it.score);
+            if (it.banDays && it.banDays !== '0') bits.push('禁言 ' + it.banDays + ' 天');
+            lines.push((i + 1) + '. ' + bits.join(' / '));
+        }
+        return lines.join('\n');
+    }
+
+    // 状态缓存条目兼容处理：
+    //   旧格式（v1.4.1 及更早）: ["隐藏", "锁定"]（纯字符串数组，无处罚信息）
+    //   新格式: { states: ["隐藏"], alter: "..." }
+    function normalizeStateEntry(entry) {
+        if (Array.isArray(entry)) return { states: entry, alter: '' };
+        if (entry && typeof entry === 'object') {
+            return {
+                states: Array.isArray(entry.states) ? entry.states : [],
+                alter: (entry.alter == null) ? '' : String(entry.alter)
+            };
+        }
+        return { states: [], alter: '' };
+    }
+
     function makeStateCacheKey(reportType, tid, pid) {
         return reportType === 13 ? ('tid_' + tid) : ('pid_' + pid);
     }
@@ -871,7 +981,7 @@
         xhr.timeout = 8000;
         xhr.onload = function() {
             if (xhr.status !== 200) {
-                if (!hasState) { onState([]); stateCache[stateKey] = []; saveStateCache(stateCache); }
+                if (!hasState) { var emptyEntry = { states: [], alter: '' }; stateCache[stateKey] = emptyEntry; saveStateCache(stateCache); onState(emptyEntry); }
                 if (!hasUser) { onUser(null); userCache[userKey] = null; saveReportedUserCache(userCache); }
                 return;
             }
@@ -884,9 +994,12 @@
                         ? ((data.__T && data.__T.type) ? data.__T.type : 0)
                         : ((data.__R && data.__R.length > 0) ? (data.__R[0].type || 0) : 0);
                     var states = getPostStates(typeVal);
-                    stateCache[stateKey] = states;
+                    // 处罚信息：主题取 __T.alterinfo，回复取 __R[0].alterinfo；
+                    // 若目标对象上没有（字段位置可能随版本变化），回退到全响应里找第一个非空 alterinfo
+                    var alter = pickAlterInfo(data, reportType);
+                    stateCache[stateKey] = { states: states, alter: alter };
                     saveStateCache(stateCache);
-                    onState(states);
+                    onState(stateCache[stateKey]);
                 }
 
                 if (!hasUser) {
@@ -904,16 +1017,16 @@
                     onUser(result);
                 }
             } catch (e) {
-                if (!hasState) { onState([]); stateCache[stateKey] = []; saveStateCache(stateCache); }
+                if (!hasState) { var emptyEntry = { states: [], alter: '' }; stateCache[stateKey] = emptyEntry; saveStateCache(stateCache); onState(emptyEntry); }
                 if (!hasUser) { onUser(null); userCache[userKey] = null; saveReportedUserCache(userCache); }
             }
         };
         xhr.onerror = function() {
-            if (!hasState) { onState([]); stateCache[stateKey] = []; saveStateCache(stateCache); }
+            if (!hasState) { var emptyEntry = { states: [], alter: '' }; stateCache[stateKey] = emptyEntry; saveStateCache(stateCache); onState(emptyEntry); }
             if (!hasUser) { onUser(null); userCache[userKey] = null; saveReportedUserCache(userCache); }
         };
         xhr.ontimeout = function() {
-            if (!hasState) { onState([]); stateCache[stateKey] = []; saveStateCache(stateCache); }
+            if (!hasState) { var emptyEntry = { states: [], alter: '' }; stateCache[stateKey] = emptyEntry; saveStateCache(stateCache); onState(emptyEntry); }
             if (!hasUser) { onUser(null); userCache[userKey] = null; saveReportedUserCache(userCache); }
         };
         xhr.send();
@@ -2102,12 +2215,26 @@
         updateSettingsPage();
     }
 
-    function renderStateTags(td, states) {
+    function renderStateTags(td, entry) {
         td.innerHTML = '';
-        if (!states || states.length === 0) {
+        var norm = normalizeStateEntry(entry);
+        var states = norm.states;
+        var alterItems = parseAlterInfo(norm.alter);
+
+        if (states.length === 0 && alterItems.length === 0) {
             td.innerHTML = '<span style="color:#aaa;font-size:11px;">-</span>';
             return;
         }
+
+        // 「处罚」标签固定排在最前，样式与其它标签一致，背景为浅红色
+        if (alterItems.length > 0) {
+            var penalty = document.createElement('span');
+            penalty.className = 'state-tag state-tag-penalty';
+            penalty.textContent = '处罚';
+            penalty.title = describeAlterItems(alterItems);
+            td.appendChild(penalty);
+        }
+
         for (var i = 0; i < states.length; i++) {
             var tag = document.createElement('span');
             tag.className = 'state-tag';
