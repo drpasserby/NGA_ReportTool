@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA版主举报管理工具
 // @namespace    https://greasyfork.org/zh-CN/scripts/577814-nga%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7
-// @version      1.4.2
+// @version      1.4.3
 // @description  NGA玩家社区网页版版主举报信息查看、筛选与管理工具
 // @author       UST
 // @match        *://bbs.nga.cn/*
@@ -785,7 +785,12 @@
     }
 
     // ========== 帖子状态解析 ==========
-    var STATE_CACHE_KEY = 'nga_post_state_cache';
+    // v1.4.3：v1.4.2 的 alterinfo 兜底逻辑会跨回复误判处罚，其缓存条目已不可信，
+    // 故换用新的缓存键，让旧缓存自然失效（不误删用户其它数据）。
+    // v3：v1.4.3 首版只读 __T.alterinfo，而主题的处罚其实挂在首楼 __R[0] 上，
+    // 因此 v2 缓存里主题的 alter 一律是空串。若不换键，修正后的逻辑会命中这些
+    // 空缓存而不再发请求，用户仍看不到处罚详情。故再升一版缓存键。
+    var STATE_CACHE_KEY = 'nga_post_state_cache_v3';
     var REPORTED_USER_CACHE_KEY = 'nga_reported_user_cache';
 
     function getPostStates(type) {
@@ -830,44 +835,84 @@
         try { localStorage.setItem(STATE_CACHE_KEY, JSON.stringify(cache)); } catch (e) {}
     }
 
-    // 从 __output=11 的响应里取出 alterinfo。
-    // 优先取目标对象的字段；找不到时在 __T / __R 里兜底查找，兼容字段位置变化。
-    function pickAlterInfo(data, reportType) {
+    // 从 __output=11 的响应里取出「本条目标」的 alterinfo。
+    //
+    // 实测数据结构（v1.4.3 依据两份真实响应确认）：
+    //   - 主题帖（reportType === 13）：__T 上【没有】alterinfo 字段。主题本身的处罚信息
+    //     挂在 __R[0] 上，而 __R[0] 正是首楼（pid === 0、lou === 0，authorid 与 __T.authorid 相同）。
+    //     例：__R[0].alterinfo = "\t[L4 0 0 150 0 引战/转进/AOE]"
+    //   - 回复帖（reportType !== 13）：请求带 ?pid=，__R[0] 即被举报的那条回复。
+    //
+    // 因此：
+    //   1) 主题优先读 __T.alterinfo，取不到再读「首楼」__R[0].alterinfo；
+    //   2) 绝不能回退去扫 __R 的其它条目 —— 主题页会加载一整页回复，其中某条回复
+    //      被处罚（或只有编辑记录 [E...]）时，旧逻辑会把它的记录算到主题头上（误报）。
+    //   3) 回复按 pid 精确匹配，匹配不到才退回 __R[0]，同样不扫其它条目。
+    function pickAlterInfo(data, reportType, pid) {
         if (!data || typeof data !== 'object') return '';
-        var candidates = [];
-        if (reportType === 13) {
-            if (data.__T) candidates.push(data.__T);
-            if (data.__R && data.__R.length > 0) candidates.push(data.__R[0]);
-        } else {
-            if (data.__R && data.__R.length > 0) candidates.push(data.__R[0]);
-            if (data.__T) candidates.push(data.__T);
+
+        function readAlter(obj) {
+            if (!obj || typeof obj !== 'object' || obj.alterinfo == null) return '';
+            var v = String(obj.alterinfo);
+            return v.replace(/\s/g, '') === '' ? '' : v;
         }
-        for (var i = 0; i < candidates.length; i++) {
-            var obj = candidates[i];
-            if (obj && typeof obj === 'object' && obj.alterinfo != null) {
-                var v = String(obj.alterinfo);
-                if (v.replace(/\s/g, '') !== '') return v;
+
+        // 首楼判定：pid === 0 或 lou === 0，且作者与主题作者一致
+        function isFirstFloor(reply, topic) {
+            if (!reply || typeof reply !== 'object') return false;
+            var p = Number(reply.pid);
+            var l = Number(reply.lou);
+            var looksLikeOp = (p === 0) || (l === 0);
+            if (!looksLikeOp) return false;
+            if (topic && topic.authorid != null && reply.authorid != null) {
+                return String(reply.authorid) === String(topic.authorid);
             }
+            return true;
         }
-        // 兜底：__R 中任一条带处罚信息
-        if (data.__R && data.__R.length > 0) {
-            for (var j = 0; j < data.__R.length; j++) {
-                var r = data.__R[j];
-                if (r && r.alterinfo != null) {
-                    var rv = String(r.alterinfo);
-                    if (rv.replace(/\s/g, '') !== '') return rv;
+
+        var replies = Array.isArray(data.__R) ? data.__R : [];
+
+        if (reportType === 13) {
+            var fromTopic = readAlter(data.__T);
+            if (fromTopic) return fromTopic;
+            if (replies.length > 0 && isFirstFloor(replies[0], data.__T)) {
+                return readAlter(replies[0]);
+            }
+            return '';
+        }
+
+        // 回复：先按 pid 精确匹配
+        var want = (pid == null) ? '' : String(pid);
+        if (want !== '' && want !== '0') {
+            for (var i = 0; i < replies.length; i++) {
+                if (String(replies[i] && replies[i].pid) === want) {
+                    return readAlter(replies[i]);
                 }
             }
         }
+        // 未命中：退回当前页首条（?pid= 查询时 __R[0] 就是目标回复）
+        if (replies.length > 0) return readAlter(replies[0]);
         return '';
     }
 
     // ---- 处罚信息（alterinfo）解析 ----
-    // NGA 的 __output=11 响应里，被处罚过的主题/回复会带 alterinfo：
-    //   无处罚: ""                              → 不显示处罚标签
-    //   一次:   "\t[L4 0 0 150 0 引战/转进/AOE]"
-    //   多次:   "\t[L6 0 0 300 20 广告]\t[L6 0 0 300 20 广告]"
-    // 形如 [L{等级} {?} {?} {扣分} {禁言天数} {理由}]，以 \t 分隔，条目数不固定。
+    // NGA 的 __output=11 响应里，主题/回复可能带 alterinfo，方括号条目有多种前缀：
+    //   处罚  [L4 0 0 150 0 引战/转进/AOE]   ← L 开头是处罚，只有这种要显示「处罚」标签
+    //   编辑  [E1795195660 0 0]              ← E 开头是编辑记录，不是处罚（真实样本见过）
+    //   无    ""                              ← 无任何记录
+    //
+    // 字段含义（依据真实响应 tid=47942872 校准）：
+    //   [L4 0 0 150 0 引战/转进/AOE]
+    //     ↑  ↑ ↑  ↑   ↑  └ 处罚理由（可含空格，取剩余全部）
+    //     │  │ │  │   └ 未使用
+    //     │  │ │  └ 扣除声望 150
+    //     │  │ └ 未使用
+    //     │  └ 未使用
+    //     └ 禁言天数 = 4（与 __U[uid].buffs["105"] 的起止时间差 345600 秒 = 4 天一致）
+    //   注意：L 后的数字是「禁言天数」，不是处罚等级；禁言天数也可为 0（只扣声望不禁言）。
+    //
+    // 处罚可有多条，以 \t 分隔；同一 alterinfo 里也可能混有非处罚条目。
+    // 因此必须按前缀过滤：只把 L 开头的条目算作处罚。
     function parseAlterInfo(raw) {
         var text = (raw == null) ? '' : String(raw);
         var items = [];
@@ -880,23 +925,23 @@
             if (m[0] === '') { re.lastIndex++; continue; }  // 零长度匹配保护
             var body = m[1].replace(/^\s+|\s+$/g, '');
             if (!body) continue;
-            // 理由可能含空格，前 5 段是数字字段，之后整体为理由
             var parts = body.split(/\s+/);
-            var level = '';
+            // 仅 L{数字} 开头才是处罚；E（编辑）等其它前缀一律忽略
             var lvMatch = /^L(\d+)$/i.exec(parts[0] || '');
-            if (lvMatch) level = lvMatch[1];
-            var score = '', banDays = '', reason = '';
+            if (!lvMatch) continue;
+            // L 后的数字 = 禁言天数
+            var banDays = lvMatch[1];
+            // 形如 [L4 0 0 150 0 理由]：parts[3] 为扣除声望，parts[5] 起整体为理由
+            var reputation = '', reason = '';
             if (parts.length >= 6) {
-                score = parts[3] || '';
-                banDays = parts[4] || '';
+                reputation = parts[3] || '';
                 reason = parts.slice(5).join(' ');
             } else {
                 reason = parts.slice(1).join(' ');
             }
             items.push({
-                level: level,
-                score: score,
                 banDays: banDays,
+                reputation: reputation,
                 reason: reason,
                 raw: body
             });
@@ -911,10 +956,10 @@
         for (var i = 0; i < items.length; i++) {
             var it = items[i];
             var bits = [];
-            if (it.level) bits.push('L' + it.level);
-            if (it.reason) bits.push(it.reason);
-            if (it.score) bits.push('扣分 ' + it.score);
             if (it.banDays && it.banDays !== '0') bits.push('禁言 ' + it.banDays + ' 天');
+            if (it.reputation && it.reputation !== '0') bits.push('扣除声望 ' + it.reputation);
+            if (it.reason) bits.push(it.reason);
+            if (bits.length === 0) bits.push(it.raw || '已处罚');
             lines.push((i + 1) + '. ' + bits.join(' / '));
         }
         return lines.join('\n');
@@ -994,9 +1039,9 @@
                         ? ((data.__T && data.__T.type) ? data.__T.type : 0)
                         : ((data.__R && data.__R.length > 0) ? (data.__R[0].type || 0) : 0);
                     var states = getPostStates(typeVal);
-                    // 处罚信息：主题取 __T.alterinfo，回复取 __R[0].alterinfo；
-                    // 若目标对象上没有（字段位置可能随版本变化），回退到全响应里找第一个非空 alterinfo
-                    var alter = pickAlterInfo(data, reportType);
+                    // 处罚信息：主题读 __T.alterinfo，取不到再读首楼 __R[0]（pid=0）；
+                    // 回复按 pid 精确匹配。不扫描 __R 其它条目，避免误报。
+                    var alter = pickAlterInfo(data, reportType, pid);
                     stateCache[stateKey] = { states: states, alter: alter };
                     saveStateCache(stateCache);
                     onState(stateCache[stateKey]);
@@ -2220,6 +2265,12 @@
         var norm = normalizeStateEntry(entry);
         var states = norm.states;
         var alterItems = parseAlterInfo(norm.alter);
+
+        // 状态位掩码里的 2048 也解作「处罚」。若 alterinfo 已经给出处罚详情，
+        // 就用带悬浮说明的处罚标签代替它，避免出现两个「处罚」。
+        if (alterItems.length > 0) {
+            states = states.filter(function(s) { return s !== '处罚'; });
+        }
 
         if (states.length === 0 && alterItems.length === 0) {
             td.innerHTML = '<span style="color:#aaa;font-size:11px;">-</span>';
