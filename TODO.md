@@ -26,3 +26,6 @@
 + 修复Bug(v1.4.3)：编辑记录被误判为处罚 —— alterinfo 中 [E...] 前缀表示编辑记录，只有 [L{数字}...] 才是处罚；parseAlterInfo 现按前缀过滤，并支持大小写 l、忽略未知前缀
 + 变更(v1.4.3)：状态缓存键升级为 nga_post_state_cache_v3。v2 使 v1.4.2 的跨回复误判缓存失效；v3 再淘汰 v1.4.3 首版只读 __T 产生的「主题 alter 为空」缓存，否则修正后的逻辑会命中空缓存而不再请求，用户仍看不到处罚详情
 + 修复Bug(v1.4.3)：处罚字段语义修正 —— L 后的数字是禁言天数而非处罚等级，parts[3] 是扣除声望。真实样本 [L4 0 0 150 0 引战/转进/AOE] 对应「禁言4天 扣除声望150 引战/转进/AOE」，并由 __U[uid].buffs["105"] 起止时间差 345600 秒 = 4 天独立佐证；悬浮说明改为「禁言 N 天 / 扣除声望 N / 理由」
++ 优化(v1.4.4)：打开举报管理窗口、切换标签、点完成后的重渲染卡顿 —— 根因是状态缓存被逐行重复解析（renderTable 每行调一次 getStateCache/getReportedUserCache，一页 25 行 = 整份缓存 JSON.parse 25 次），而状态缓存随看过的帖子单调增长。修复：① 四个读取函数（getStatusMap/getStateCache/getReportedUserCache/getCachedReports）新增内存缓存层 memRead/memWrite，重复读不再回到 localStorage；② renderTable 把 getStateCache/getReportedUserCache/isColumnVisible 提到 for 循环外；③ getStatusMap 提到循环外。单次重渲染的 localStorage.getItem 从 82 次降到 7 次，数据访问耗时从 45.4ms（状态缓存 6042 条）降到 0.012ms，且不再随缓存增长而变慢
++ 修复Bug(v1.4.4)：内存缓存层引入后的一致性隐患 —— 凡绕过 save* 直接改动这些键的地方（刷新数据时 removeItem 状态/被举报人缓存、clearAll、clearOldest100、覆盖导入、合并导入）都补上 invalidateMemCaches() 或 memWrite()，避免读到已删除/已覆盖的旧副本
++ 新增(v1.4.4)：tools/mem-cache-selftest.js（内存缓存正确性测试，24 项断言，含「扫描 user.js 核对所有裸写点都有失效调用」的静态检查）、tools/bench-perf.js（重渲染耗时基准脚本）
