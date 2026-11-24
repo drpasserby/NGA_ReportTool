@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NGA版主举报管理工具
 // @namespace    https://greasyfork.org/zh-CN/scripts/577814-nga%E7%89%88%E4%B8%BB%E4%B8%BE%E6%8A%A5%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7
-// @version      1.4.3
+// @version      1.4.4
 // @description  NGA玩家社区网页版版主举报信息查看、筛选与管理工具
 // @author       UST
 // @match        *://bbs.nga.cn/*
@@ -677,15 +677,48 @@
         return r[6] + '_' + r[7] + '_' + r[1] + '_' + r[9];
     }
 
-    function getStatusMap() {
+    // ========== 内存缓存层（v1.4.4 性能优化） ==========
+    // 问题：getStatusMap / getStateCache / getReportedUserCache / getCachedReports 原本
+    // 每次都从 localStorage 取字符串并 JSON.parse 一遍。而 renderTable 是「每行」都调用
+    // getStateCache() 和 getReportedUserCache()，一页 25 行 = 整个状态缓存被解析 25 次。
+    // 状态缓存随浏览过的帖子单调增长（每个 tid/pid 各一条），用它越久越大，于是
+    // 打开面板/切标签/点完成每次重渲染都会卡一下（实测 6000 条约 100ms）。
+    //
+    // 方案：给这四个读取函数各加一个内存副本。localStorage 仍然在每次读写时被调用
+    // （保持与原来一致的异常行为），但只在内存副本缺失时才 JSON.parse。
+    // 写入（save*）时同步更新内存副本；任何可能绕过 save* 的清除操作必须调
+    // invalidateMemCaches()，否则内存副本会与 localStorage 不一致。
+    var memCaches = {};   // key -> 已解析的对象（读命中直接返回同一引用）
+
+    function memRead(key) {
+        if (memCaches.hasOwnProperty(key)) return memCaches[key];
         try {
-            var raw = localStorage.getItem(STATUS_KEY);
-            return raw ? JSON.parse(raw) : {};
-        } catch (e) { return {}; }
+            var raw = localStorage.getItem(key);
+            var val = raw ? JSON.parse(raw) : null;
+            memCaches[key] = val;
+            return val;
+        } catch (e) {
+            // 解析失败不写入内存副本，下次调用会重试（与原行为一致：每次都返回默认值）
+            return null;
+        }
+    }
+
+    function memWrite(key, val) {
+        memCaches[key] = val;
+    }
+
+    // 清空内存副本。凡是用 localStorage.removeItem / setItem 直接改动这些键的地方都必须调用。
+    function invalidateMemCaches() {
+        memCaches = {};
+    }
+
+    function getStatusMap() {
+        return memRead(STATUS_KEY) || {};
     }
 
     function saveStatusMap(map) {
         try { localStorage.setItem(STATUS_KEY, JSON.stringify(map)); } catch (e) {}
+        memWrite(STATUS_KEY, map);
     }
 
     // ========== 上一次「一键完成」时间 ==========
@@ -825,14 +858,12 @@
     }
 
     function getStateCache() {
-        try {
-            var raw = localStorage.getItem(STATE_CACHE_KEY);
-            return raw ? JSON.parse(raw) : {};
-        } catch (e) { return {}; }
+        return memRead(STATE_CACHE_KEY) || {};
     }
 
     function saveStateCache(cache) {
         try { localStorage.setItem(STATE_CACHE_KEY, JSON.stringify(cache)); } catch (e) {}
+        memWrite(STATE_CACHE_KEY, cache);
     }
 
     // 从 __output=11 的响应里取出「本条目标」的 alterinfo。
@@ -984,14 +1015,12 @@
     }
 
     function getReportedUserCache() {
-        try {
-            var raw = localStorage.getItem(REPORTED_USER_CACHE_KEY);
-            return raw ? JSON.parse(raw) : {};
-        } catch (e) { return {}; }
+        return memRead(REPORTED_USER_CACHE_KEY) || {};
     }
 
     function saveReportedUserCache(cache) {
         try { localStorage.setItem(REPORTED_USER_CACHE_KEY, JSON.stringify(cache)); } catch (e) {}
+        memWrite(REPORTED_USER_CACHE_KEY, cache);
     }
 
     function makeReportedUserCacheKey(reportType, tid, pid) {
@@ -1634,13 +1663,7 @@
 
     // ========== 缓存操作 ==========
     function getCachedReports() {
-        try {
-            var raw = localStorage.getItem(CACHE_KEY);
-            return raw ? JSON.parse(raw) : [];
-        } catch (e) {
-            logError('读取缓存失败', e);
-            return [];
-        }
+        return memRead(CACHE_KEY) || [];
     }
 
     function saveCache(reports) {
@@ -1649,6 +1672,7 @@
         } catch (e) {
             logError('保存缓存失败', e);
         }
+        memWrite(CACHE_KEY, reports);
     }
 
     function mergeReports(existingList, newList) {
@@ -2005,19 +2029,42 @@
         var start = currentPage * PAGE_SIZE;
         var pageReports = allReports.slice(start, start + PAGE_SIZE);
 
+        // v1.4.4 性能优化：这三个「整份缓存」的读取移到循环外。
+        // 原本每行各调一次 getReportStatus() / getStateCache() / getReportedUserCache()，
+        // 一页 25 行就把整份状态缓存与被举报人缓存各解析 25 次。
+        // 提升后每渲染只取一次，并在循环内共享同一份引用。
+        // 注意：循环体内不得修改这三个对象（renderTable 只读，写操作都在事件回调里）。
+        var colVis = {
+            mark: isColumnVisible('mark'),
+            state: isColumnVisible('state'),
+            time: isColumnVisible('time'),
+            type: isColumnVisible('type'),
+            reporter: isColumnVisible('reporter'),
+            title: isColumnVisible('title'),
+            reportedUser: isColumnVisible('reportedUser'),
+            reason: isColumnVisible('reason'),
+            forum: isColumnVisible('forum')
+        };
+        var rowStatusMap = getStatusMap();
+        var rowStateCache = getStateCache();
+        var rowUserCache = getReportedUserCache();
+
         for (var i = 0; i < pageReports.length; i++) {
             var r = pageReports[i];
             var ts = r[9], type = r[0], uid = r[1], nickname = r[2];
             var title = r[5], reason = r[11], forum = r[13], tid = r[6], pid = r[7];
-            var status = getReportStatus(r);
             var reportKey = buildReportKey(r);
+            var status = rowStatusMap.hasOwnProperty(reportKey) ? rowStatusMap[reportKey] : STATUS_UNPROCESSED;
+            if (status !== STATUS_UNPROCESSED && status !== STATUS_PROCESSED && status !== STATUS_MARKED) {
+                status = STATUS_UNPROCESSED;
+            }
             var isSystem = nickname === '#SYSTEM#';
             var isPrivate = type === 10;
 
             var tr = document.createElement('tr');
 
             // 标记列
-            if (isColumnVisible('mark')) {
+            if (colVis.mark) {
                 var tdMark = document.createElement('td');
                 tdMark.className = 'col-mark';
                 tdMark.innerHTML = '<span class="status-tag ' + STATUS_CSS[status] + '">' + STATUS_LABELS[status] + '</span>';
@@ -2025,7 +2072,7 @@
             }
 
             // 状态列
-            if (isColumnVisible('state')) {
+            if (colVis.state) {
                 var tdState = document.createElement('td');
                 tdState.className = 'col-state';
                 if (isSystem || isPrivate) {
@@ -2033,22 +2080,21 @@
                 } else {
                     tdState.innerHTML = '<span style="color:#999;font-size:11px;">加载中...</span>';
                     var cacheKey = makeStateCacheKey(type, tid, pid);
-                    var stateCache = getStateCache();
-                    if (stateCache.hasOwnProperty(cacheKey)) {
-                        renderStateTags(tdState, stateCache[cacheKey]);
+                    if (rowStateCache.hasOwnProperty(cacheKey)) {
+                        renderStateTags(tdState, rowStateCache[cacheKey]);
                     }
                 }
                 tr.appendChild(tdState);
             }
 
-            if (isColumnVisible('time')) {
+            if (colVis.time) {
                 var tdTime = document.createElement('td');
                 tdTime.className = 'col-time';
                 tdTime.textContent = formatTimestamp(ts);
                 tr.appendChild(tdTime);
             }
 
-            if (isColumnVisible('type')) {
+            if (colVis.type) {
                 var tdType = document.createElement('td');
                 tdType.className = 'col-type';
                 if (isSystem) {
@@ -2063,7 +2109,7 @@
                 tr.appendChild(tdType);
             }
 
-            if (isColumnVisible('reporter')) {
+            if (colVis.reporter) {
                 var tdReporter = document.createElement('td');
                 tdReporter.className = 'col-reporter';
                 var reporterLink = document.createElement('a');
@@ -2081,7 +2127,7 @@
                 tr.appendChild(tdReporter);
             }
 
-            if (isColumnVisible('title')) {
+            if (colVis.title) {
                 var tdTitle = document.createElement('td');
                 tdTitle.className = 'col-title';
                 if (isSystem) {
@@ -2108,7 +2154,7 @@
             }
 
             // 被举报人列
-            if (isColumnVisible('reportedUser')) {
+            if (colVis.reportedUser) {
                 var tdReportedUser = document.createElement('td');
                 tdReportedUser.className = 'col-reported-user';
                 if (isSystem) {
@@ -2118,22 +2164,21 @@
                 } else {
                     tdReportedUser.innerHTML = '<span style="color:#999;font-size:11px;">加载中...</span>';
                     var ruCacheKey = makeReportedUserCacheKey(type, tid, pid);
-                    var ruCache = getReportedUserCache();
-                    if (ruCache.hasOwnProperty(ruCacheKey)) {
-                        renderReportedUser(tdReportedUser, ruCache[ruCacheKey]);
+                    if (rowUserCache.hasOwnProperty(ruCacheKey)) {
+                        renderReportedUser(tdReportedUser, rowUserCache[ruCacheKey]);
                     }
                 }
                 tr.appendChild(tdReportedUser);
             }
 
-            if (isColumnVisible('reason')) {
+            if (colVis.reason) {
                 var tdReason = document.createElement('td');
                 tdReason.className = 'col-reason';
                 tdReason.innerHTML = isSystem ? '系统消息' : (isPrivate ? '私信' : highlightText(reason));
                 tr.appendChild(tdReason);
             }
 
-            if (isColumnVisible('forum')) {
+            if (colVis.forum) {
                 var tdForum = document.createElement('td');
                 tdForum.className = 'col-forum';
                 tdForum.textContent = isSystem ? '系统消息' : (isPrivate ? '私信' : forum);
@@ -2488,6 +2533,7 @@
             var savedOk = getCachedReports().length === merged.length;
             localStorage.removeItem(STATE_CACHE_KEY);
             localStorage.removeItem(REPORTED_USER_CACHE_KEY);
+            invalidateMemCaches();
             refreshTable();
             refreshFilterUI();
             // 成功路径（无论是否处于筛选状态）一律静默，不弹提示；仅失败/异常才提示
@@ -2510,6 +2556,7 @@
         var reports = getCachedReports();
         if (reports.length <= 100) {
             localStorage.removeItem(CACHE_KEY);
+            invalidateMemCaches();
         } else {
             var sorted = reports.slice().sort(function(a, b) { return a[9] - b[9]; });
             var remaining = sorted.slice(100);
@@ -2527,6 +2574,7 @@
 
     function clearAll() {
         localStorage.removeItem(CACHE_KEY);
+        invalidateMemCaches();
         refreshTable();
         refreshFilterUI();
         var msgEl = document.getElementById('nga-settings-msg');
@@ -2638,6 +2686,7 @@
             for (var i = 0; i < keys.length; i++) {
                 localStorage.setItem(keys[i], JSON.stringify(importedData[keys[i]]));
             }
+            invalidateMemCaches();
             refreshTable();
             refreshFilterUI();
             updateSettingsPage();
@@ -2657,6 +2706,7 @@
                     var existing = getCachedReports();
                     var mergedReports = mergeReports(existing, imported);
                     localStorage.setItem(key, JSON.stringify(mergedReports));
+                    memWrite(CACHE_KEY, mergedReports);
                 } else if (key === KEYWORD_KEY && Array.isArray(imported)) {
                     var localKw = getKeywords();
                     var localIdMap = {};
@@ -2681,6 +2731,7 @@
                 }
                 merged++;
             }
+            invalidateMemCaches();
             refreshTable();
             refreshFilterUI();
             updateSettingsPage();
